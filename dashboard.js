@@ -18,46 +18,12 @@ function rpShort(n) {
     return rp(n);
 }
 
-// ---------- Dummy Data ----------
-const PRODUCTS = [
-    { id: 'P001', sku: 'MNM-001', name: 'Kopi Arabica 250g', category: 'Minuman', cost: 45000, price: 68000, stock: 124, minStock: 20, unit: 'pcs', emoji: '☕' },
-    { id: 'P002', sku: 'MNM-002', name: 'Teh Celup Premium 25s', category: 'Minuman', cost: 12000, price: 18500, stock: 230, minStock: 50, unit: 'box', emoji: '🍵' },
-    { id: 'P003', sku: 'MNM-003', name: 'Sirup Rasa Buah 1L', category: 'Minuman', cost: 22000, price: 35000, stock: 67, minStock: 15, unit: 'botol', emoji: '🧃' },
-    { id: 'P004', sku: 'MKN-001', name: 'Mie Instan Goreng (dus)', category: 'Makanan', cost: 92000, price: 115000, stock: 45, minStock: 10, unit: 'dus', emoji: '🍜' },
-    { id: 'P005', sku: 'MKN-002', name: 'Biskuit Kaleng 350g', category: 'Makanan', cost: 28000, price: 42000, stock: 89, minStock: 20, unit: 'pcs', emoji: '🍪' },
-    { id: 'P006', sku: 'MKN-003', name: 'Wafer Coklat 12x21g', category: 'Makanan', cost: 18000, price: 27000, stock: 156, minStock: 30, unit: 'pack', emoji: '🍫' },
-    { id: 'P007', sku: 'SMB-001', name: 'Beras Premium 5kg', category: 'Sembako', cost: 62000, price: 78000, stock: 8, minStock: 15, unit: 'sak', emoji: '🌾' },
-    { id: 'P008', sku: 'SMB-002', name: 'Gula Pasir 1kg', category: 'Sembako', cost: 14000, price: 18000, stock: 12, minStock: 25, unit: 'kg', emoji: '🍬' },
-    { id: 'P009', sku: 'SMB-003', name: 'Minyak Goreng 2L', category: 'Sembako', cost: 28000, price: 36000, stock: 5, minStock: 10, unit: 'botol', emoji: '🫗' },
-    { id: 'P010', sku: 'MNM-004', name: 'Susu UHT 1L (karton)', category: 'Minuman', cost: 155000, price: 195000, stock: 32, minStock: 10, unit: 'karton', emoji: '🥛' },
-    { id: 'P011', sku: 'MKN-004', name: 'Sarden Kaleng 155g', category: 'Makanan', cost: 11000, price: 16500, stock: 78, minStock: 20, unit: 'pcs', emoji: '🐟' },
-    { id: 'P012', sku: 'LNY-001', name: 'Sabun Cuci Piring 750ml', category: 'Lainnya', cost: 8500, price: 13000, stock: 140, minStock: 30, unit: 'botol', emoji: '🧴' },
-    { id: 'P013', sku: 'LNY-002', name: 'Tisu Wajah 250s', category: 'Lainnya', cost: 12000, price: 18000, stock: 95, minStock: 20, unit: 'pack', emoji: '🧻' },
-    { id: 'P014', sku: 'SMB-004', name: 'Tepung Terigu 1kg', category: 'Sembako', cost: 10000, price: 14500, stock: 18, minStock: 20, unit: 'kg', emoji: '🌾' },
-    { id: 'P015', sku: 'MNM-005', name: 'Air Mineral 600ml (dus)', category: 'Minuman', cost: 38000, price: 52000, stock: 200, minStock: 30, unit: 'dus', emoji: '💧' },
-    { id: 'P016', sku: 'MKN-005', name: 'Kecap Manis 600ml', category: 'Makanan', cost: 15000, price: 22000, stock: 62, minStock: 15, unit: 'botol', emoji: '🫙' },
-];
+// ---------- Dynamic Data ----------
+let PRODUCTS = [];
+let CUSTOMERS = [];
+let VENDORS = [];
 
-const CUSTOMERS = [
-    { id: 'C001', name: 'Toko Berkah Jaya', type: 'Reseller', phone: '0812-3456-7001', city: 'Surabaya', creditLimit: 15000000, totalOrders: 42, totalSpent: 28500000, color: 'blue' },
-    { id: 'C002', name: 'Warung Sari Rasa', type: 'Warung', phone: '0813-2345-6002', city: 'Malang', creditLimit: 5000000, totalOrders: 18, totalSpent: 8750000, color: 'emerald' },
-    { id: 'C003', name: 'Kafe Nusantara', type: 'Kafe', phone: '0821-4567-8003', city: 'Surabaya', creditLimit: 20000000, totalOrders: 31, totalSpent: 45200000, color: 'amber' },
-    { id: 'C004', name: 'Toko Makmur Sentosa', type: 'Toko', phone: '0852-6789-0004', city: 'Sidoarjo', creditLimit: 10000000, totalOrders: 25, totalSpent: 18900000, color: 'violet' },
-    { id: 'C005', name: 'Warung Makan Bu Diah', type: 'Warung', phone: '0896-1234-5005', city: 'Gresik', creditLimit: 3000000, totalOrders: 12, totalSpent: 4200000, color: 'rose' },
-    { id: 'C006', name: 'Minimarket Jaya Abadi', type: 'Reseller', phone: '0811-9876-5006', city: 'Surabaya', creditLimit: 25000000, totalOrders: 55, totalSpent: 67800000, color: 'indigo' },
-    { id: 'C007', name: 'Kedai Kopi Pagi', type: 'Kafe', phone: '0857-6543-2007', city: 'Malang', creditLimit: 8000000, totalOrders: 14, totalSpent: 12300000, color: 'cyan' },
-    { id: 'C008', name: 'Toko Sembako Ibu Rina', type: 'Toko', phone: '0878-3210-9008', city: 'Mojokerto', creditLimit: 7000000, totalOrders: 20, totalSpent: 9800000, color: 'blue' },
-];
-
-const VENDORS = [
-    { id: 'V001', name: 'PT Sumber Minuman Nusantara', category: 'Minuman', phone: '021-5556-7890', city: 'Jakarta', totalPurchases: 125000000, debt: 12500000, color: 'blue' },
-    { id: 'V002', name: 'CV Pangan Makmur', category: 'Makanan', phone: '031-7778-9012', city: 'Surabaya', totalPurchases: 87000000, debt: 4200000, color: 'emerald' },
-    { id: 'V003', name: 'UD Sembako Sentosa', category: 'Sembako', phone: '031-3334-5678', city: 'Sidoarjo', totalPurchases: 64000000, debt: 0, color: 'amber' },
-    { id: 'V004', name: 'PT Kopi Nusantara', category: 'Minuman', phone: '0341-445-6789', city: 'Malang', totalPurchases: 42000000, debt: 8500000, color: 'violet' },
-    { id: 'V005', name: 'CV Bersih Sempurna', category: 'Non-Pangan', phone: '021-2223-4567', city: 'Jakarta', totalPurchases: 18000000, debt: 0, color: 'rose' },
-];
-
-const INVOICES = [
+let INVOICES = [
     { id: 'INV-2026-0041', date: '2026-06-03', customerId: 'C001', customer: 'Toko Berkah Jaya', total: 2850000, paid: 2850000, type: 'Tunai', method: 'Transfer', status: 'lunas', dueDate: '2026-06-03' },
     { id: 'INV-2026-0040', date: '2026-06-02', customerId: 'C003', customer: 'Kafe Nusantara', total: 4750000, paid: 2000000, type: 'Tempo', method: 'Transfer', status: 'sebagian', dueDate: '2026-06-16' },
     { id: 'INV-2026-0039', date: '2026-06-02', customerId: 'C006', customer: 'Minimarket Jaya Abadi', total: 8200000, paid: 0, type: 'Tempo', method: '-', status: 'belum', dueDate: '2026-06-16' },
@@ -70,7 +36,7 @@ const INVOICES = [
     { id: 'INV-2026-0032', date: '2026-05-28', customerId: 'C006', customer: 'Minimarket Jaya Abadi', total: 12500000, paid: 6000000, type: 'Tempo', method: 'Transfer', status: 'sebagian', dueDate: '2026-06-11' },
 ];
 
-const PURCHASES = [
+let PURCHASES = [
     { id: 'PO-2026-018', date: '2026-06-02', vendorId: 'V001', vendor: 'PT Sumber Minuman Nusantara', total: 15600000, paid: 15600000, type: 'Lunas', status: 'selesai' },
     { id: 'PO-2026-017', date: '2026-06-01', vendorId: 'V002', vendor: 'CV Pangan Makmur', total: 8400000, paid: 4200000, type: 'Tempo 14 Hari', status: 'proses' },
     { id: 'PO-2026-016', date: '2026-05-30', vendorId: 'V004', vendor: 'PT Kopi Nusantara', total: 12500000, paid: 4000000, type: 'Tempo 30 Hari', status: 'proses' },
@@ -79,7 +45,7 @@ const PURCHASES = [
     { id: 'PO-2026-013', date: '2026-05-22', vendorId: 'V001', vendor: 'PT Sumber Minuman Nusantara', total: 18200000, paid: 9000000, type: 'Tempo 14 Hari', status: 'proses' },
 ];
 
-const CASH_TRANSACTIONS = [
+let CASH_TRANSACTIONS = [
     { id: 'CT001', date: '2026-06-03', type: 'IN', category: 'Penjualan', desc: 'Pembayaran INV-2026-0041', amount: 2850000, method: 'Transfer Bank' },
     { id: 'CT002', date: '2026-06-02', type: 'IN', category: 'Penjualan', desc: 'DP dari Kafe Nusantara', amount: 2000000, method: 'Transfer Bank' },
     { id: 'CT003', date: '2026-06-02', type: 'OUT', category: 'Pembelian Stok', desc: 'Bayar PO-2026-018', amount: 15600000, method: 'Transfer Bank' },
@@ -339,13 +305,13 @@ function renderProducts(filter = '', category = '') {
                 <td>${p.minStock}</td>
                 <td><span class="badge-status ${stockStatus}">${stockLabel}</span></td>
                 <td style="text-align: right; white-space: nowrap;">
-                    <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;" title="Edit Produk" onclick="openModal('modal-edit-product')">
+                    <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;" title="Edit Produk" onclick="openEditProductModal('${p.id}')">
                         <i data-lucide="edit-2" style="width: 14px; height: 14px; margin: 0;"></i>
                     </button>
                     <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem; color: var(--blue-600);" title="Stock Opname" onclick="openModal('modal-stock-opname')">
                         <i data-lucide="boxes" style="width: 14px; height: 14px; margin: 0;"></i>
                     </button>
-                    <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--rose-500);" title="Hapus Produk">
+                    <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--rose-500);" title="Hapus Produk" onclick="deleteProduct('${p.id}')">
                         <i data-lucide="trash-2" style="width: 14px; height: 14px; margin: 0;"></i>
                     </button>
                 </td>
@@ -381,8 +347,11 @@ function renderCustomers(filter = '', type = '') {
 
     grid.innerHTML = filtered.map(c => `
         <div class="entity-card" style="position: relative;">
-            <button class="btn-toolbar secondary" style="position: absolute; top: 1rem; right: 1rem; padding: 0.25rem 0.5rem; font-size: 0.75rem;" title="Edit Pelanggan" onclick="openModal('modal-edit-customer')">
+            <button class="btn-toolbar secondary" style="position: absolute; top: 1rem; right: 1rem; padding: 0.25rem 0.5rem; font-size: 0.75rem;" title="Edit Pelanggan" onclick="openEditCustomerModal('${c.id}')">
                 <i data-lucide="edit-2" style="width: 14px; height: 14px; margin: 0;"></i>
+            </button>
+            <button class="btn-toolbar secondary" style="position: absolute; top: 1rem; right: 3rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--rose-500);" title="Hapus Pelanggan" onclick="deleteCustomer('${c.id}')">
+                <i data-lucide="trash-2" style="width: 14px; height: 14px; margin: 0;"></i>
             </button>
             <div class="entity-card-header">
                 <div class="entity-avatar ${c.color}">${c.name.charAt(0)}</div>
@@ -422,8 +391,11 @@ function renderCustomers(filter = '', type = '') {
                 <td>${c.phone}</td>
                 <td style="font-weight:700;">${rp(c.creditLimit)}</td>
                 <td style="text-align: right; white-space: nowrap;">
-                    <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" title="Edit Pelanggan" onclick="openModal('modal-edit-customer')">
+                    <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" title="Edit Pelanggan" onclick="openEditCustomerModal('${c.id}')">
                         <i data-lucide="edit-2" style="width: 14px; height: 14px; margin: 0;"></i>
+                    </button>
+                    <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--rose-500);" title="Hapus Pelanggan" onclick="deleteCustomer('${c.id}')">
+                        <i data-lucide="trash-2" style="width: 14px; height: 14px; margin: 0;"></i>
                     </button>
                 </td>
             </tr>
@@ -1175,12 +1147,16 @@ function capitalize(str) {
 }
 
 // ---------- Initialize Everything ----------
-function init() {
+async function init() {
     renderDashboard();
     renderProducts();
     renderCustomers();
     renderVendors();
-    renderPurchases();
+    
+    // We will fetch products and customers dynamically instead of rendering mock data first
+    await fetchProducts();
+    await fetchCustomers();
+
     renderInvoices();
     renderPiutang();
     renderHutang();
@@ -1192,7 +1168,189 @@ function init() {
     populateCustomerSelect();
 
     // Initialize Lucide icons
-    lucide.createIcons();
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+// ---------- API Integrations ----------
+const getAuthHeaders = () => ({
+    'Authorization': 'Bearer ' + localStorage.getItem('token'),
+    'Content-Type': 'application/json'
+});
+
+async function fetchProducts() {
+    try {
+        const res = await fetch('/api/products', { headers: getAuthHeaders() });
+        const data = await res.json();
+        PRODUCTS = data.map(p => ({
+            id: p.id,
+            sku: p.sku,
+            name: p.name,
+            category: p.category,
+            cost: parseFloat(p.cost_price),
+            price: parseFloat(p.sell_price),
+            stock: p.stock,
+            minStock: p.min_stock,
+            unit: p.badge || 'pcs',
+            emoji: '📦'
+        }));
+        renderProducts(document.getElementById('product-search')?.value, document.getElementById('product-category-filter')?.value);
+    } catch (err) {
+        console.error('Failed to fetch products', err);
+    }
+}
+
+async function saveProduct(isEdit) {
+    const id = isEdit ? document.getElementById('edit-product-id').value : null;
+    const prefix = isEdit ? 'edit' : 'add';
+    
+    const payload = {
+        name: document.getElementById(`${prefix}-product-name`).value,
+        sku: document.getElementById(`${prefix}-product-sku`).value,
+        category: document.getElementById(`${prefix}-product-category`).value,
+        cost_price: document.getElementById(`${prefix}-product-cost`).value,
+        sell_price: document.getElementById(`${prefix}-product-price`).value,
+        stock: isEdit ? document.getElementById('edit-product-stock').value : document.getElementById('add-product-stock').value,
+        min_stock: document.getElementById(`${prefix}-product-minstock`).value,
+        badge: isEdit ? document.getElementById('edit-product-unit').value : document.getElementById('add-product-unit').value
+    };
+
+    const url = isEdit ? `/api/products/${id}` : '/api/products';
+    const method = isEdit ? 'PUT' : 'POST';
+
+    try {
+        const res = await fetch(url, {
+            method,
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            closeModal(`modal-${isEdit ? 'edit' : 'add'}-product`);
+            fetchProducts();
+        } else {
+            const err = await res.json();
+            alert('Error: ' + err.error);
+        }
+    } catch (err) {
+        console.error(err);
+        alert('Gagal menyimpan produk');
+    }
+}
+
+function openEditProductModal(id) {
+    const p = PRODUCTS.find(x => x.id === id);
+    if (!p) return;
+    document.getElementById('edit-product-id').value = p.id;
+    document.getElementById('edit-product-name').value = p.name;
+    document.getElementById('edit-product-sku').value = p.sku;
+    document.getElementById('edit-product-category').value = p.category;
+    document.getElementById('edit-product-cost').value = p.cost;
+    document.getElementById('edit-product-price').value = p.price;
+    document.getElementById('edit-product-stock').value = p.stock;
+    document.getElementById('edit-product-minstock').value = p.minStock;
+    document.getElementById('edit-product-unit').value = p.unit;
+    openModal('modal-edit-product');
+}
+
+async function deleteProduct(id) {
+    if (!confirm('Yakin ingin menghapus produk ini?')) return;
+    try {
+        const res = await fetch(`/api/products/${id}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            fetchProducts();
+        } else {
+            alert('Gagal menghapus produk');
+        }
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+async function fetchCustomers() {
+    try {
+        const res = await fetch('/api/customers', { headers: getAuthHeaders() });
+        const data = await res.json();
+        CUSTOMERS = data.map(c => ({
+            id: c.id,
+            name: c.name,
+            type: c.type,
+            phone: c.phone,
+            city: c.city,
+            creditLimit: parseFloat(c.credit_limit),
+            totalSpent: 0,
+            totalOrders: 0,
+            color: 'blue'
+        }));
+        renderCustomers(document.getElementById('customer-search')?.value, document.getElementById('customer-type-filter')?.value);
+    } catch (err) {
+        console.error('Failed to fetch customers', err);
+    }
+}
+
+async function saveCustomer(isEdit) {
+    const id = isEdit ? document.getElementById('edit-customer-id').value : null;
+    const prefix = isEdit ? 'edit' : 'add';
+    
+    const payload = {
+        name: document.getElementById(`${prefix}-customer-name`).value,
+        type: document.getElementById(`${prefix}-customer-type`).value,
+        city: document.getElementById(`${prefix}-customer-city`).value,
+        phone: document.getElementById(`${prefix}-customer-phone`).value,
+        credit_limit: document.getElementById(`${prefix}-customer-limit`).value
+    };
+
+    const url = isEdit ? `/api/customers/${id}` : '/api/customers';
+    const method = isEdit ? 'PUT' : 'POST';
+
+    try {
+        const res = await fetch(url, {
+            method,
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            closeModal(`modal-${isEdit ? 'edit' : 'add'}-customer`);
+            fetchCustomers();
+        } else {
+            const err = await res.json();
+            alert('Error: ' + err.error);
+        }
+    } catch (err) {
+        console.error(err);
+        alert('Gagal menyimpan pelanggan');
+    }
+}
+
+function openEditCustomerModal(id) {
+    const c = CUSTOMERS.find(x => x.id === id);
+    if (!c) return;
+    document.getElementById('edit-customer-id').value = c.id;
+    document.getElementById('edit-customer-id-display').value = c.id;
+    document.getElementById('edit-customer-name').value = c.name;
+    document.getElementById('edit-customer-type').value = c.type;
+    document.getElementById('edit-customer-city').value = c.city;
+    document.getElementById('edit-customer-phone').value = c.phone;
+    document.getElementById('edit-customer-limit').value = c.creditLimit;
+    openModal('modal-edit-customer');
+}
+
+async function deleteCustomer(id) {
+    if (!confirm('Yakin ingin menghapus pelanggan ini?')) return;
+    try {
+        const res = await fetch(`/api/customers/${id}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            fetchCustomers();
+        } else {
+            alert('Gagal menghapus pelanggan');
+        }
+    } catch (err) {
+        console.error(err);
+    }
 }
 
 // Run on DOM ready

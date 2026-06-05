@@ -96,6 +96,35 @@ app.post('/api/products', authenticateToken, async (req, res) => {
   }
 });
 
+app.put('/api/products/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { sku, name, category, cost_price, sell_price, stock, min_stock, badge } = req.body;
+  const updateQuery = 'UPDATE products SET sku = $1, name = $2, category = $3, cost_price = $4, sell_price = $5, stock = $6, min_stock = $7, badge = $8 WHERE id = $9';
+  try {
+    const result = await pool.query(updateQuery, [sku, name, category, cost_price, sell_price, stock, min_stock, badge, id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Produk tidak ditemukan' });
+    }
+    res.json({ success: true, message: 'Produk berhasil diperbarui' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/products/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const deleteQuery = 'DELETE FROM products WHERE id = $1';
+  try {
+    const result = await pool.query(deleteQuery, [id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Produk tidak ditemukan' });
+    }
+    res.json({ success: true, message: 'Produk berhasil dihapus' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // --- Customers Routes ---
 app.get('/api/customers', authenticateToken, async (req, res) => {
   try {
@@ -123,6 +152,35 @@ app.post('/api/customers', authenticateToken, async (req, res) => {
   try {
     await pool.query(insertQuery, ['C' + Date.now(), name, type, phone, city, credit_limit]);
     res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put('/api/customers/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { name, type, phone, city, credit_limit } = req.body;
+  const updateQuery = 'UPDATE customers SET name = $1, type = $2, phone = $3, city = $4, credit_limit = $5 WHERE id = $6';
+  try {
+    const result = await pool.query(updateQuery, [name, type, phone, city, credit_limit, id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Pelanggan tidak ditemukan' });
+    }
+    res.json({ success: true, message: 'Pelanggan berhasil diperbarui' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/customers/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const deleteQuery = 'DELETE FROM customers WHERE id = $1';
+  try {
+    const result = await pool.query(deleteQuery, [id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Pelanggan tidak ditemukan' });
+    }
+    res.json({ success: true, message: 'Pelanggan berhasil dihapus' });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

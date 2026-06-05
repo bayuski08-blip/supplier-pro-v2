@@ -978,16 +978,16 @@
         <div class="modal-body">
             <div class="form-group">
                 <label>Nama Produk</label>
-                <input type="text" class="form-input" placeholder="Contoh: Kopi Arabica 250g">
+                <input type="text" id="add-product-name" class="form-input" placeholder="Contoh: Kopi Arabica 250g">
             </div>
             <div class="form-row">
                 <div class="form-group">
                     <label>SKU</label>
-                    <input type="text" class="form-input" placeholder="SKU-XXX">
+                    <input type="text" id="add-product-sku" class="form-input" placeholder="SKU-XXX">
                 </div>
                 <div class="form-group">
                     <label>Kategori</label>
-                    <select class="form-input">
+                    <select id="add-product-category" class="form-input">
                         <option>Minuman</option>
                         <option>Makanan</option>
                         <option>Sembako</option>
@@ -998,31 +998,31 @@
             <div class="form-row">
                 <div class="form-group">
                     <label>Harga Pokok (HPP)</label>
-                    <input type="number" class="form-input" placeholder="0">
+                    <input type="number" id="add-product-cost" class="form-input" placeholder="0">
                 </div>
                 <div class="form-group">
                     <label>Harga Jual</label>
-                    <input type="number" class="form-input" placeholder="0">
+                    <input type="number" id="add-product-price" class="form-input" placeholder="0">
                 </div>
             </div>
             <div class="form-row">
                 <div class="form-group">
                     <label>Stok Awal</label>
-                    <input type="number" class="form-input" placeholder="0">
+                    <input type="number" id="add-product-stock" class="form-input" placeholder="0">
                 </div>
                 <div class="form-group">
                     <label>Minimum Stok</label>
-                    <input type="number" class="form-input" placeholder="0">
+                    <input type="number" id="add-product-minstock" class="form-input" placeholder="0">
                 </div>
             </div>
             <div class="form-group">
                 <label>Satuan</label>
-                <input type="text" class="form-input" placeholder="pcs / kg / dus / botol">
+                <input type="text" id="add-product-unit" class="form-input" placeholder="pcs / kg / dus / botol">
             </div>
         </div>
         <div class="modal-footer">
             <button class="btn-toolbar secondary" onclick="closeModal('modal-add-product')">Batal</button>
-            <button class="btn-toolbar primary" onclick="closeModal('modal-add-product')"><i data-lucide="save"></i> Simpan</button>
+            <button class="btn-toolbar primary" onclick="saveProduct(false)"><i data-lucide="save"></i> Simpan</button>
         </div>
     </div>
 </div>
@@ -1035,47 +1035,54 @@
             <button class="modal-close" onclick="closeModal('modal-edit-product')"><i data-lucide="x"></i></button>
         </div>
         <div class="modal-body">
+            <input type="hidden" id="edit-product-id">
             <div class="form-group">
                 <label>Nama Produk</label>
-                <input type="text" class="form-input" value="Kopi Arabica 250g">
+                <input type="text" id="edit-product-name" class="form-input">
             </div>
             <div class="form-row">
                 <div class="form-group">
                     <label>SKU</label>
-                    <input type="text" class="form-input" value="MNM-001">
+                    <input type="text" id="edit-product-sku" class="form-input">
                 </div>
                 <div class="form-group">
                     <label>Kategori</label>
-                    <select class="form-input">
-                        <option selected>Minuman</option>
-                        <option>Makanan</option>
-                        <option>Sembako</option>
-                        <option>Lainnya</option>
+                    <select id="edit-product-category" class="form-input">
+                        <option value="Minuman">Minuman</option>
+                        <option value="Makanan">Makanan</option>
+                        <option value="Sembako">Sembako</option>
+                        <option value="Lainnya">Lainnya</option>
                     </select>
                 </div>
             </div>
             <div class="form-row">
                 <div class="form-group">
                     <label>Harga Pokok (HPP)</label>
-                    <input type="number" class="form-input" value="45000">
+                    <input type="number" id="edit-product-cost" class="form-input">
                 </div>
                 <div class="form-group">
                     <label>Harga Jual</label>
-                    <input type="number" class="form-input" value="68000">
+                    <input type="number" id="edit-product-price" class="form-input">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Minimum Stok</label>
+                    <input type="number" id="edit-product-minstock" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label>Stok Saat Ini (Hanya Tampil)</label>
+                    <input type="number" id="edit-product-stock" class="form-input" disabled>
                 </div>
             </div>
             <div class="form-group">
-                <label>Minimum Stok</label>
-                <input type="number" class="form-input" value="20">
-            </div>
-            <div class="form-group">
                 <label>Satuan</label>
-                <input type="text" class="form-input" value="pcs">
+                <input type="text" id="edit-product-unit" class="form-input">
             </div>
         </div>
         <div class="modal-footer">
             <button class="btn-toolbar secondary" onclick="closeModal('modal-edit-product')">Batal</button>
-            <button class="btn-toolbar primary" onclick="closeModal('modal-edit-product')"><i data-lucide="save"></i> Simpan Perubahan</button>
+            <button class="btn-toolbar primary" onclick="saveProduct(true)"><i data-lucide="save"></i> Simpan Perubahan</button>
         </div>
     </div>
 </div>
@@ -1153,47 +1160,43 @@
         <div class="modal-body">
             <div class="form-row">
                 <div class="form-group">
-                    <label>ID Pelanggan</label>
-                    <input type="text" class="form-input" placeholder="C0XX (Otomatis jika kosong)">
+                    <label>ID Pelanggan (Otomatis)</label>
+                    <input type="text" class="form-input" placeholder="Otomatis dari Sistem" disabled>
                 </div>
                 <div class="form-group">
                     <label>Nama Pelanggan</label>
-                    <input type="text" class="form-input" placeholder="Nama usaha / pelanggan">
+                    <input type="text" id="add-customer-name" class="form-input" placeholder="Nama usaha / pelanggan">
                 </div>
             </div>
             <div class="form-row">
                 <div class="form-group">
                     <label>Tipe</label>
-                    <select class="form-input">
-                        <option>Reseller</option>
-                        <option>Warung</option>
-                        <option>Kafe</option>
-                        <option>Toko</option>
+                    <select id="add-customer-type" class="form-input">
+                        <option value="Reseller">Reseller</option>
+                        <option value="Warung">Warung</option>
+                        <option value="Kafe">Kafe</option>
+                        <option value="Toko">Toko</option>
                     </select>
                 </div>
                 <div class="form-group">
                     <label>Kota</label>
-                    <input type="text" class="form-input" placeholder="Surabaya">
+                    <input type="text" id="add-customer-city" class="form-input" placeholder="Surabaya">
                 </div>
-            </div>
-            <div class="form-group">
-                <label>Alamat Lengkap</label>
-                <textarea class="form-input" placeholder="Nama Jalan, RT/RW, Kecamatan"></textarea>
             </div>
             <div class="form-row">
                 <div class="form-group">
                     <label>WhatsApp / Telepon</label>
-                    <input type="text" class="form-input" placeholder="08xx-xxxx-xxxx">
+                    <input type="text" id="add-customer-phone" class="form-input" placeholder="08xx-xxxx-xxxx">
                 </div>
                 <div class="form-group">
                     <label>Limit Piutang</label>
-                    <input type="number" class="form-input" placeholder="5000000">
+                    <input type="number" id="add-customer-limit" class="form-input" placeholder="5000000">
                 </div>
             </div>
         </div>
         <div class="modal-footer">
             <button class="btn-toolbar secondary" onclick="closeModal('modal-add-customer')">Batal</button>
-            <button class="btn-toolbar primary" onclick="closeModal('modal-add-customer')"><i data-lucide="save"></i> Simpan</button>
+            <button class="btn-toolbar primary" onclick="saveCustomer(false)"><i data-lucide="save"></i> Simpan</button>
         </div>
     </div>
 </div>
@@ -1206,49 +1209,46 @@
             <button class="modal-close" onclick="closeModal('modal-edit-customer')"><i data-lucide="x"></i></button>
         </div>
         <div class="modal-body">
+            <input type="hidden" id="edit-customer-id">
             <div class="form-row">
                 <div class="form-group">
                     <label>ID Pelanggan</label>
-                    <input type="text" class="form-input" value="C001" disabled>
+                    <input type="text" id="edit-customer-id-display" class="form-input" disabled>
                 </div>
                 <div class="form-group">
                     <label>Nama Pelanggan</label>
-                    <input type="text" class="form-input" value="Toko Berkah Jaya">
+                    <input type="text" id="edit-customer-name" class="form-input">
                 </div>
             </div>
             <div class="form-row">
                 <div class="form-group">
                     <label>Tipe</label>
-                    <select class="form-input">
-                        <option selected>Reseller</option>
-                        <option>Warung</option>
-                        <option>Kafe</option>
-                        <option>Toko</option>
+                    <select id="edit-customer-type" class="form-input">
+                        <option value="Reseller">Reseller</option>
+                        <option value="Warung">Warung</option>
+                        <option value="Kafe">Kafe</option>
+                        <option value="Toko">Toko</option>
                     </select>
                 </div>
                 <div class="form-group">
                     <label>Kota</label>
-                    <input type="text" class="form-input" value="Surabaya">
+                    <input type="text" id="edit-customer-city" class="form-input">
                 </div>
-            </div>
-            <div class="form-group">
-                <label>Alamat Lengkap</label>
-                <textarea class="form-input">Jl. Diponegoro No 45</textarea>
             </div>
             <div class="form-row">
                 <div class="form-group">
                     <label>WhatsApp / Telepon</label>
-                    <input type="text" class="form-input" value="0812-3456-7001">
+                    <input type="text" id="edit-customer-phone" class="form-input">
                 </div>
                 <div class="form-group">
                     <label>Limit Piutang</label>
-                    <input type="number" class="form-input" value="15000000">
+                    <input type="number" id="edit-customer-limit" class="form-input">
                 </div>
             </div>
         </div>
         <div class="modal-footer">
             <button class="btn-toolbar secondary" onclick="closeModal('modal-edit-customer')">Batal</button>
-            <button class="btn-toolbar primary" onclick="closeModal('modal-edit-customer')"><i data-lucide="save"></i> Simpan Perubahan</button>
+            <button class="btn-toolbar primary" onclick="saveCustomer(true)"><i data-lucide="save"></i> Simpan Perubahan</button>
         </div>
     </div>
 </div>
