@@ -29,7 +29,7 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- Customers (dengan alamat_lengkap dan id_number)
-INSERT INTO customers (id, name, type, phone, city, alamat_lengkap, credit_limit, id_number) 
+INSERT INTO customers (id, name, type, phone, city, alamat_lengkap, "credit_limit", id_number) 
 VALUES 
   ('C001', 'Toko Berkah Jaya', 'Reseller', '0812-3456-7001', 'Surabaya', 'Jl. Diponegoro No 45, Surabaya', 15000000, '3578012345678901'),
   ('C002', 'Warung Sari Rasa', 'Warung', '0813-2345-6002', 'Malang', 'Jl. Ijen No 12, Malang', 5000000, '3573019876543210'),
