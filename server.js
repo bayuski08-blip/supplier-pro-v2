@@ -98,6 +98,58 @@ app.get('/api/master/payment-types', authenticateToken, async (req, res) => {
   }
 });
 
+// --- Master Data CRUD (POST, PUT, DELETE) ---
+const MASTER_TABLE_WHITELIST = {
+  product_categories: 'product_categories',
+  product_units: 'product_units',
+  customer_categories: 'customer_categories',
+  vendor_categories: 'vendor_categories',
+  payment_types: 'payment_types'
+};
+
+app.post('/api/master/:type', authenticateToken, async (req, res) => {
+  const tableName = MASTER_TABLE_WHITELIST[req.params.type];
+  if (!tableName) return res.status(400).json({ error: 'Tipe master data tidak valid' });
+  const { id, name } = req.body;
+  if (!name) return res.status(400).json({ error: 'Nama wajib diisi' });
+  try {
+    await pool.query(`INSERT INTO ${tableName} (id, name) VALUES ($1, $2)`, [id || req.params.type.toUpperCase().slice(0,2) + '-' + Date.now(), name]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put('/api/master/:type/:id', authenticateToken, async (req, res) => {
+  const tableName = MASTER_TABLE_WHITELIST[req.params.type];
+  if (!tableName) return res.status(400).json({ error: 'Tipe master data tidak valid' });
+  const { name } = req.body;
+  if (!name) return res.status(400).json({ error: 'Nama wajib diisi' });
+  try {
+    const result = await pool.query(`UPDATE ${tableName} SET name = $1 WHERE id = $2`, [name, req.params.id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Data tidak ditemukan' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/master/:type/:id', authenticateToken, async (req, res) => {
+  const tableName = MASTER_TABLE_WHITELIST[req.params.type];
+  if (!tableName) return res.status(400).json({ error: 'Tipe master data tidak valid' });
+  try {
+    const result = await pool.query(`DELETE FROM ${tableName} WHERE id = $1`, [req.params.id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Data tidak ditemukan' });
+    res.json({ success: true });
+  } catch (err) {
+    if (err.code === '23503') {
+      res.status(409).json({ error: 'Data masih digunakan dan tidak dapat dihapus.' });
+    } else {
+      res.status(400).json({ error: err.message });
+    }
+  }
+});
+
 // --- Dashboard & Summary Routes ---
 app.get('/api/dashboard/summary', authenticateToken, async (req, res) => {
   try {

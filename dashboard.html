@@ -90,6 +90,9 @@
                 <div class="nav-item" data-page="roles" id="nav-roles">
                     <i data-lucide="shield-check"></i> Otoritas Akses
                 </div>
+                <div class="nav-item" data-page="master-data" id="nav-master-data">
+                    <i data-lucide="database"></i> Master Data
+                </div>
             </div>
         </nav>
 
@@ -957,6 +960,48 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </section>
+
+            <!-- ============================================================
+                 PAGE 16: MASTER DATA
+                 ============================================================ -->
+            <section class="page-section" id="page-master-data">
+                <div class="page-toolbar">
+                    <div class="page-toolbar-left">
+                        <div class="tab-filters" id="master-data-tabs">
+                            <button class="tab-filter active" data-master="product_categories">Kategori Produk</button>
+                            <button class="tab-filter" data-master="product_units">Satuan Produk</button>
+                            <button class="tab-filter" data-master="customer_categories">Kategori Pelanggan</button>
+                            <button class="tab-filter" data-master="vendor_categories">Kategori Vendor</button>
+                            <button class="tab-filter" data-master="payment_types">Tipe Pembayaran</button>
+                        </div>
+                    </div>
+                    <div class="page-toolbar-right">
+                        <button class="btn-toolbar primary" id="btn-add-master" onclick="openAddMasterModal()">
+                            <i data-lucide="plus"></i> Tambah Data
+                        </button>
+                    </div>
+                </div>
+
+                <div class="data-table-wrapper">
+                    <table class="data-table" id="master-data-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 160px;">ID</th>
+                                <th>Nama</th>
+                                <th style="text-align: right; width: 120px;">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="master-data-body">
+                            <!-- Filled by JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="empty-state" id="master-data-empty" style="display:none;">
+                    <i data-lucide="database"></i>
+                    <p>Belum ada data master. Klik <strong>Tambah Data</strong> untuk memulai.</p>
                 </div>
             </section>
 
@@ -2074,6 +2119,60 @@
         <div class="modal-footer">
             <button class="btn-toolbar secondary" onclick="closeModal('modal-add-staff')">Batal</button>
             <button class="btn-toolbar primary" onclick="closeModal('modal-add-staff')"><i data-lucide="save"></i> Simpan Data</button>
+        </div>
+    </div>
+</div>
+
+<!-- Master Data Modal (Add/Edit) -->
+<div class="modal-overlay" id="modal-master-data">
+    <div class="modal" style="max-width: 420px;">
+        <div class="modal-header">
+            <h3 id="modal-master-data-title">Tambah Data Master</h3>
+            <button class="modal-close" onclick="closeModal('modal-master-data')"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="master-data-edit-id">
+            <div class="form-group">
+                <label>ID <span style="color:var(--gray-400);font-size:0.8rem;">(Otomatis jika kosong)</span></label>
+                <input type="text" id="master-data-id" class="form-input" placeholder="Contoh: PC-5">
+            </div>
+            <div class="form-group">
+                <label>Nama <span style="color:var(--rose-500);">*</span></label>
+                <input type="text" id="master-data-name" class="form-input" placeholder="Nama data master">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-toolbar secondary" onclick="closeModal('modal-master-data')">Batal</button>
+            <button class="btn-toolbar primary" id="btn-save-master" onclick="saveMasterData()">
+                <i data-lucide="save"></i> Simpan
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Master Confirm Modal -->
+<div class="modal-overlay" id="modal-delete-master">
+    <div class="modal" style="max-width: 380px;">
+        <div class="modal-header">
+            <h3>Konfirmasi Hapus</h3>
+            <button class="modal-close" onclick="closeModal('modal-delete-master')"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+            <p style="color: var(--gray-700); margin-bottom: 1rem;">
+                Apakah Anda yakin ingin menghapus <strong id="delete-master-name"></strong>?
+            </p>
+            <p style="font-size: 0.875rem; color: var(--rose-600); background: var(--rose-50); padding: 0.75rem; border-radius: 0.5rem;">
+                <i data-lucide="alert-triangle" style="width: 16px; height: 16px; display: inline-block; vertical-align: middle; margin-right: 0.25rem;"></i>
+                Data yang masih digunakan oleh produk/pelanggan/vendor tidak dapat dihapus.
+            </p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-toolbar secondary" onclick="closeModal('modal-delete-master')">Batal</button>
+            <button class="btn-toolbar primary" id="btn-confirm-delete-master"
+                style="background: var(--rose-600); color: white; border-color: var(--rose-600);"
+                onclick="confirmDeleteMaster()">
+                <i data-lucide="trash-2"></i> Ya, Hapus
+            </button>
         </div>
     </div>
 </div>

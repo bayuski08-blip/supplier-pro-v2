@@ -96,6 +96,7 @@ const PAGE_TITLES = {
     reports: { title: 'Laporan & Insight', subtitle: 'Analisis performa bisnis' },
     settings: { title: 'Pengaturan', subtitle: 'Konfigurasi profil dan preferensi' },
     roles: { title: 'Otoritas Akses', subtitle: 'Kelola hak akses dan peran staff' },
+    'master-data': { title: 'Master Data', subtitle: 'Kelola kategori, satuan, dan tipe pembayaran' },
 };
 
 // ---------- Navigation ----------
@@ -1355,3 +1356,177 @@ async function deleteCustomer(id) {
 
 // Run on DOM ready
 document.addEventListener('DOMContentLoaded', init);
+
+// ==========================================================================
+// MASTER DATA — CRUD
+// ==========================================================================
+
+let currentMasterType = 'product_categories';
+let masterDataToDelete = null;
+
+const MASTER_LABELS = {
+    product_categories: 'Kategori Produk',
+    product_units: 'Satuan Produk',
+    customer_categories: 'Kategori Pelanggan',
+    vendor_categories: 'Kategori Vendor',
+    payment_types: 'Tipe Pembayaran'
+};
+
+const MASTER_API_MAP = {
+    product_categories: 'product-categories',
+    product_units: 'product-units',
+    customer_categories: 'customer-categories',
+    vendor_categories: 'vendor-categories',
+    payment_types: 'payment-types'
+};
+
+async function fetchMasterData(type) {
+    currentMasterType = type || currentMasterType;
+    const apiKey = MASTER_API_MAP[currentMasterType];
+    try {
+        const res = await fetch(`/api/master/${apiKey}`, { headers: getAuthHeaders() });
+        const data = await res.json();
+        renderMasterTable(data);
+    } catch (err) {
+        console.error('fetchMasterData error:', err);
+    }
+}
+
+function renderMasterTable(data) {
+    const tbody = document.getElementById('master-data-body');
+    const emptyState = document.getElementById('master-data-empty');
+    const table = document.getElementById('master-data-table');
+
+    if (!data || data.length === 0) {
+        tbody.innerHTML = '';
+        table.style.display = 'none';
+        emptyState.style.display = 'flex';
+        return;
+    }
+
+    table.style.display = '';
+    emptyState.style.display = 'none';
+
+    tbody.innerHTML = data.map(row => `
+        <tr>
+            <td style="font-family: monospace; color: var(--gray-500); font-size: 0.8rem;">${row.id}</td>
+            <td style="font-weight: 600;">${row.name}</td>
+            <td style="text-align: right;">
+                <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;"
+                    onclick="openEditMasterModal('${row.id}', '${row.name.replace(/'/g, "\\'")}')"
+                    title="Edit">
+                    <i data-lucide="edit-2" style="width:14px;height:14px;margin:0;"></i>
+                </button>
+                <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--rose-600);"
+                    onclick="openDeleteMasterModal('${row.id}', '${row.name.replace(/'/g, "\\'")}')"
+                    title="Hapus">
+                    <i data-lucide="trash-2" style="width:14px;height:14px;margin:0;"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+
+    if (window.lucide) lucide.createIcons();
+}
+
+function openAddMasterModal() {
+    document.getElementById('modal-master-data-title').textContent =
+        'Tambah ' + (MASTER_LABELS[currentMasterType] || 'Data Master');
+    document.getElementById('master-data-edit-id').value = '';
+    document.getElementById('master-data-id').value = '';
+    document.getElementById('master-data-id').disabled = false;
+    document.getElementById('master-data-name').value = '';
+    openModal('modal-master-data');
+}
+
+function openEditMasterModal(id, name) {
+    document.getElementById('modal-master-data-title').textContent =
+        'Edit ' + (MASTER_LABELS[currentMasterType] || 'Data Master');
+    document.getElementById('master-data-edit-id').value = id;
+    document.getElementById('master-data-id').value = id;
+    document.getElementById('master-data-id').disabled = true; // ID tidak boleh diubah saat edit
+    document.getElementById('master-data-name').value = name;
+    openModal('modal-master-data');
+}
+
+async function saveMasterData() {
+    const editId = document.getElementById('master-data-edit-id').value;
+    const id = document.getElementById('master-data-id').value.trim();
+    const name = document.getElementById('master-data-name').value.trim();
+    const apiKey = MASTER_API_MAP[currentMasterType];
+
+    if (!name) {
+        alert('Nama tidak boleh kosong.');
+        return;
+    }
+
+    const isEdit = !!editId;
+    const url = isEdit ? `/api/master/${currentMasterType}/${editId}` : `/api/master/${currentMasterType}`;
+    const method = isEdit ? 'PUT' : 'POST';
+    const body = isEdit ? { name } : { id: id || undefined, name };
+
+    try {
+        const res = await fetch(url, {
+            method,
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const result = await res.json();
+        if (result.success) {
+            closeModal('modal-master-data');
+            fetchMasterData();
+        } else {
+            alert('Gagal menyimpan: ' + (result.error || 'Error tidak diketahui'));
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+function openDeleteMasterModal(id, name) {
+    masterDataToDelete = { id, name };
+    document.getElementById('delete-master-name').textContent = name;
+    openModal('modal-delete-master');
+}
+
+async function confirmDeleteMaster() {
+    if (!masterDataToDelete) return;
+    const { id } = masterDataToDelete;
+    try {
+        const res = await fetch(`/api/master/${currentMasterType}/${id}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+        const result = await res.json();
+        closeModal('modal-delete-master');
+        if (result.success) {
+            masterDataToDelete = null;
+            fetchMasterData();
+        } else {
+            alert('Gagal menghapus: ' + (result.error || 'Error tidak diketahui'));
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+// Wire up master data tabs
+document.addEventListener('DOMContentLoaded', () => {
+    const tabs = document.querySelectorAll('#master-data-tabs .tab-filter');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            currentMasterType = tab.dataset.master;
+            fetchMasterData(currentMasterType);
+        });
+    });
+
+    // Auto-load when navigating to master-data page
+    const masterNavItem = document.getElementById('nav-master-data');
+    if (masterNavItem) {
+        masterNavItem.addEventListener('click', () => {
+            fetchMasterData(currentMasterType);
+        });
+    }
+});
