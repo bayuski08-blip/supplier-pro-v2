@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS customers (
   phone VARCHAR(255),
   city VARCHAR(255),
   alamat_lengkap TEXT,
-  "credit_limit" NUMERIC DEFAULT 0,
+  credit_lmt NUMERIC DEFAULT 0,
   id_number VARCHAR(255)
 );
 

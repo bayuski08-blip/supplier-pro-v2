@@ -1278,7 +1278,7 @@ async function fetchCustomers() {
             type: c.type,
             phone: c.phone,
             city: c.city,
-            creditLimit: parseFloat(c.credit_limit),
+            creditLimit: parseFloat(c.credit_lmt),
             totalSpent: 0,
             totalOrders: 0,
             color: 'blue'
@@ -1298,7 +1298,7 @@ async function saveCustomer(isEdit) {
         type: document.getElementById(`${prefix}-customer-type`).value,
         city: document.getElementById(`${prefix}-customer-city`).value,
         phone: document.getElementById(`${prefix}-customer-phone`).value,
-        credit_limit: document.getElementById(`${prefix}-customer-limit`).value
+        credit_lmt: document.getElementById(`${prefix}-customer-limit`).value
     };
 
     const url = isEdit ? `/api/customers/${id}` : '/api/customers';

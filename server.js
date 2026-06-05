@@ -147,10 +147,10 @@ app.get('/api/customers/search', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/customers', authenticateToken, async (req, res) => {
-  const { name, type, phone, city, alamat_lengkap, credit_limit, id_number } = req.body;
-  const insertQuery = 'INSERT INTO customers (id, name, type, phone, city, alamat_lengkap, credit_limit, id_number) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)';
+  const { name, type, phone, city, alamat_lengkap, credit_lmt, id_number } = req.body;
+  const insertQuery = 'INSERT INTO customers (id, name, type, phone, city, alamat_lengkap, credit_lmt, id_number) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)';
   try {
-    await pool.query(insertQuery, ['C' + Date.now(), name, type, phone, city, alamat_lengkap, credit_limit, id_number]);
+    await pool.query(insertQuery, ['C' + Date.now(), name, type, phone, city, alamat_lengkap, credit_lmt, id_number]);
     res.json({ success: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -159,10 +159,10 @@ app.post('/api/customers', authenticateToken, async (req, res) => {
 
 app.put('/api/customers/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const { name, type, phone, city, alamat_lengkap, credit_limit, id_number } = req.body;
-  const updateQuery = 'UPDATE customers SET name = $1, type = $2, phone = $3, city = $4, alamat_lengkap = $5, credit_limit = $6, id_number = $7 WHERE id = $8';
+  const { name, type, phone, city, alamat_lengkap, credit_lmt, id_number } = req.body;
+  const updateQuery = 'UPDATE customers SET name = $1, type = $2, phone = $3, city = $4, alamat_lengkap = $5, credit_lmt = $6, id_number = $7 WHERE id = $8';
   try {
-    const result = await pool.query(updateQuery, [name, type, phone, city, alamat_lengkap, credit_limit, id_number, id]);
+    const result = await pool.query(updateQuery, [name, type, phone, city, alamat_lengkap, credit_lmt, id_number, id]);
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Pelanggan tidak ditemukan' });
     }
