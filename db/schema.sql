@@ -1,55 +1,112 @@
+-- =============================================
+-- SupplierPro Database Schema (PRD2 Final)
+-- =============================================
+
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
-  username VARCHAR(255) UNIQUE,
-  password VARCHAR(255),
-  role VARCHAR(255)
+  username VARCHAR(255) UNIQUE NOT NULL,
+  name VARCHAR(255),
+  email VARCHAR(255),
+  password_hash VARCHAR(255) NOT NULL,
+  role VARCHAR(50) DEFAULT 'kasir',
+  active BOOLEAN DEFAULT true
 );
 
 CREATE TABLE IF NOT EXISTS products (
   id VARCHAR(255) PRIMARY KEY,
   sku VARCHAR(255),
-  name VARCHAR(255),
+  name VARCHAR(255) NOT NULL,
   category VARCHAR(255),
-  cost_price NUMERIC,
-  sell_price NUMERIC,
-  stock INTEGER,
-  min_stock INTEGER,
+  cost_price NUMERIC DEFAULT 0,
+  sell_price NUMERIC DEFAULT 0,
+  stock INTEGER DEFAULT 0,
+  min_stock INTEGER DEFAULT 0,
+  unit VARCHAR(255) DEFAULT 'pcs',
   badge VARCHAR(255)
 );
 
 CREATE TABLE IF NOT EXISTS customers (
   id VARCHAR(255) PRIMARY KEY,
-  name VARCHAR(255),
+  name VARCHAR(255) NOT NULL,
   type VARCHAR(255),
   phone VARCHAR(255),
   city VARCHAR(255),
-  credit_limit NUMERIC
+  alamat_lengkap TEXT,
+  credit_limit NUMERIC DEFAULT 0,
+  id_number VARCHAR(255)
 );
 
 CREATE TABLE IF NOT EXISTS vendors (
   id VARCHAR(255) PRIMARY KEY,
-  name VARCHAR(255),
+  name VARCHAR(255) NOT NULL,
   category VARCHAR(255),
   phone VARCHAR(255),
-  city VARCHAR(255)
+  city VARCHAR(255),
+  id_number VARCHAR(255),
+  alamat_lengkap TEXT,
+  nama_bank VARCHAR(255),
+  nomor_rek VARCHAR(255),
+  pemilik_rek VARCHAR(255)
 );
 
-CREATE TABLE IF NOT EXISTS invoices (
+CREATE TABLE IF NOT EXISTS stock_adjustments (
   id VARCHAR(255) PRIMARY KEY,
-  date VARCHAR(255),
-  customer_id VARCHAR(255),
-  total NUMERIC,
-  paid NUMERIC,
-  type VARCHAR(255),
-  status VARCHAR(255)
+  product_id VARCHAR(255) REFERENCES products(id) ON DELETE CASCADE,
+  type VARCHAR(10) NOT NULL CHECK (type IN ('IN', 'OUT')),
+  quantity INTEGER NOT NULL,
+  reason TEXT,
+  adjustment_date DATE DEFAULT CURRENT_DATE,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
 );
 
-CREATE TABLE IF NOT EXISTS purchases (
+CREATE TABLE IF NOT EXISTS sales_invoices (
   id VARCHAR(255) PRIMARY KEY,
   date VARCHAR(255),
-  vendor_id VARCHAR(255),
-  total NUMERIC,
-  paid NUMERIC,
-  type VARCHAR(255),
-  status VARCHAR(255)
+  customer_id VARCHAR(255) REFERENCES customers(id) ON DELETE SET NULL,
+  subtotal NUMERIC DEFAULT 0,
+  discount NUMERIC DEFAULT 0,
+  tax NUMERIC DEFAULT 0,
+  total NUMERIC DEFAULT 0,
+  paid_amount NUMERIC DEFAULT 0,
+  due_date VARCHAR(255),
+  payment_type VARCHAR(255),
+  payment_method VARCHAR(255),
+  status VARCHAR(255) DEFAULT 'belum'
+);
+
+CREATE TABLE IF NOT EXISTS invoice_items (
+  id VARCHAR(255) PRIMARY KEY,
+  invoice_id VARCHAR(255) REFERENCES sales_invoices(id) ON DELETE CASCADE,
+  product_id VARCHAR(255) REFERENCES products(id) ON DELETE SET NULL,
+  quantity INTEGER NOT NULL,
+  price NUMERIC NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS purchase_orders (
+  id VARCHAR(255) PRIMARY KEY,
+  date VARCHAR(255),
+  vendor_id VARCHAR(255) REFERENCES vendors(id) ON DELETE SET NULL,
+  total NUMERIC DEFAULT 0,
+  paid_amount NUMERIC DEFAULT 0,
+  due_date VARCHAR(255),
+  payment_type VARCHAR(255),
+  status VARCHAR(255) DEFAULT 'proses'
+);
+
+CREATE TABLE IF NOT EXISTS purchase_order_items (
+  id VARCHAR(255) PRIMARY KEY,
+  purchase_order_id VARCHAR(255) REFERENCES purchase_orders(id) ON DELETE CASCADE,
+  product_id VARCHAR(255) REFERENCES products(id) ON DELETE SET NULL,
+  quantity INTEGER NOT NULL,
+  cost NUMERIC NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS cash_transactions (
+  id VARCHAR(255) PRIMARY KEY,
+  date DATE DEFAULT CURRENT_DATE,
+  type VARCHAR(10) NOT NULL CHECK (type IN ('IN', 'OUT')),
+  category VARCHAR(255),
+  description TEXT,
+  amount NUMERIC NOT NULL,
+  method VARCHAR(255)
 );

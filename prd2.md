@@ -146,6 +146,7 @@ erDiagram
         string type
         string phone
         string city
+        string alamat_lengkap
         float credit_limit
         string id_number "nomor KTP"
     }
@@ -157,6 +158,10 @@ erDiagram
         string phone
         string city
         string id_number "nomor KTP"
+        string alamat_lengkap
+        string nama_bank
+        string nomor_rek
+        string pemilik_rek
     }
 
     USERS {
