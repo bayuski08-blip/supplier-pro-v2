@@ -1,7 +1,34 @@
 -- =============================================
--- SupplierPro Database Schema (PRD2 Final)
+-- SupplierPro Database Schema (PRD2 Master Data Update)
 -- =============================================
 
+-- Master Tables
+CREATE TABLE IF NOT EXISTS product_categories (
+  id VARCHAR(255) PRIMARY KEY,
+  name VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS product_units (
+  id VARCHAR(255) PRIMARY KEY,
+  name VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS customer_categories (
+  id VARCHAR(255) PRIMARY KEY,
+  name VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS vendor_categories (
+  id VARCHAR(255) PRIMARY KEY,
+  name VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS payment_types (
+  id VARCHAR(255) PRIMARY KEY,
+  name VARCHAR(255) NOT NULL
+);
+
+-- Core Tables
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
   username VARCHAR(255) UNIQUE NOT NULL,
@@ -16,37 +43,34 @@ CREATE TABLE IF NOT EXISTS products (
   id VARCHAR(255) PRIMARY KEY,
   sku VARCHAR(255),
   name VARCHAR(255) NOT NULL,
-  category VARCHAR(255),
+  category_id VARCHAR(255) REFERENCES product_categories(id) ON DELETE SET NULL,
   cost_price NUMERIC DEFAULT 0,
   sell_price NUMERIC DEFAULT 0,
   stock INTEGER DEFAULT 0,
   min_stock INTEGER DEFAULT 0,
-  unit VARCHAR(255) DEFAULT 'pcs',
+  unit_id VARCHAR(255) REFERENCES product_units(id) ON DELETE SET NULL,
   badge VARCHAR(255)
 );
 
 CREATE TABLE IF NOT EXISTS customers (
   id VARCHAR(255) PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
-  type VARCHAR(255),
+  customer_category_id VARCHAR(255) REFERENCES customer_categories(id) ON DELETE SET NULL,
   phone VARCHAR(255),
   city VARCHAR(255),
-  alamat_lengkap TEXT,
-  credit_lmt NUMERIC DEFAULT 0,
-  id_number VARCHAR(255)
+  address TEXT,
+  id_number VARCHAR(255),
+  npwp VARCHAR(255),
+  credit_lmt NUMERIC DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS vendors (
   id VARCHAR(255) PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
-  category VARCHAR(255),
+  vendor_category_id VARCHAR(255) REFERENCES vendor_categories(id) ON DELETE SET NULL,
   phone VARCHAR(255),
   city VARCHAR(255),
-  id_number VARCHAR(255),
-  alamat_lengkap TEXT,
-  nama_bank VARCHAR(255),
-  nomor_rek VARCHAR(255),
-  pemilik_rek VARCHAR(255)
+  id_number VARCHAR(255)
 );
 
 CREATE TABLE IF NOT EXISTS stock_adjustments (
@@ -69,7 +93,7 @@ CREATE TABLE IF NOT EXISTS sales_invoices (
   total NUMERIC DEFAULT 0,
   paid_amount NUMERIC DEFAULT 0,
   due_date VARCHAR(255),
-  payment_type VARCHAR(255),
+  payment_type_id VARCHAR(255) REFERENCES payment_types(id) ON DELETE SET NULL,
   payment_method VARCHAR(255),
   status VARCHAR(255) DEFAULT 'belum'
 );
@@ -89,7 +113,7 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
   total NUMERIC DEFAULT 0,
   paid_amount NUMERIC DEFAULT 0,
   due_date VARCHAR(255),
-  payment_type VARCHAR(255),
+  payment_type_id VARCHAR(255) REFERENCES payment_types(id) ON DELETE SET NULL,
   status VARCHAR(255) DEFAULT 'proses'
 );
 
@@ -108,5 +132,9 @@ CREATE TABLE IF NOT EXISTS cash_transactions (
   category VARCHAR(255),
   description TEXT,
   amount NUMERIC NOT NULL,
-  method VARCHAR(255)
+  method VARCHAR(255),
+  invoice_id VARCHAR(255) REFERENCES sales_invoices(id) ON DELETE SET NULL,
+  purchase_order_id VARCHAR(255) REFERENCES purchase_orders(id) ON DELETE SET NULL,
+  payment_type_id VARCHAR(255) REFERENCES payment_types(id) ON DELETE SET NULL,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
 );

@@ -1,85 +1,77 @@
 -- =============================================
--- Migration Script: Update schema sesuai PRD2
--- Pendekatan: ALTER TABLE (data aman)
+-- Migration Script: Master Data & PRD2 Schema Updates
 -- =============================================
 
--- ========== 1. PRODUCTS: tambah kolom unit ==========
-ALTER TABLE products ADD COLUMN IF NOT EXISTS unit VARCHAR(255) DEFAULT 'pcs';
-
--- ========== 2. CUSTOMERS: tambah kolom baru & rename ==========
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS alamat_lengkap TEXT;
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS id_number VARCHAR(255);
-ALTER TABLE customers RENAME COLUMN credit_limit TO credit_lmt;
-
--- ========== 3. VENDORS: tambah kolom baru ==========
-ALTER TABLE vendors ADD COLUMN IF NOT EXISTS id_number VARCHAR(255);
-ALTER TABLE vendors ADD COLUMN IF NOT EXISTS alamat_lengkap TEXT;
-ALTER TABLE vendors ADD COLUMN IF NOT EXISTS nama_bank VARCHAR(255);
-ALTER TABLE vendors ADD COLUMN IF NOT EXISTS nomor_rek VARCHAR(255);
-ALTER TABLE vendors ADD COLUMN IF NOT EXISTS pemilik_rek VARCHAR(255);
-
--- ========== 4. USERS: tambah kolom baru & rename ==========
-ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR(255);
-ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255);
-ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
-ALTER TABLE users RENAME COLUMN password TO password_hash;
-
--- ========== 5. INVOICES -> SALES_INVOICES ==========
-ALTER TABLE invoices RENAME TO sales_invoices;
-ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS subtotal NUMERIC DEFAULT 0;
-ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS discount NUMERIC DEFAULT 0;
-ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS tax NUMERIC DEFAULT 0;
-ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS due_date VARCHAR(255);
-ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS payment_type VARCHAR(255);
-ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS payment_method VARCHAR(255);
-ALTER TABLE sales_invoices RENAME COLUMN paid TO paid_amount;
-ALTER TABLE sales_invoices RENAME COLUMN type TO payment_type;
-
--- ========== 6. PURCHASES -> PURCHASE_ORDERS ==========
-ALTER TABLE purchases RENAME TO purchase_orders;
-ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS due_date VARCHAR(255);
-ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS payment_type VARCHAR(255);
-ALTER TABLE purchase_orders RENAME COLUMN paid TO paid_amount;
-ALTER TABLE purchase_orders RENAME COLUMN type TO payment_type;
-
--- ========== 7. CREATE tabel-tabel baru ==========
-
--- Stock Adjustments
-CREATE TABLE IF NOT EXISTS stock_adjustments (
+-- ========== 1. CREATE MASTER TABLES ==========
+CREATE TABLE IF NOT EXISTS product_categories (
   id VARCHAR(255) PRIMARY KEY,
-  product_id VARCHAR(255) REFERENCES products(id) ON DELETE CASCADE,
-  type VARCHAR(10) NOT NULL CHECK (type IN ('IN', 'OUT')),
-  quantity INTEGER NOT NULL,
-  reason TEXT,
-  adjustment_date DATE DEFAULT CURRENT_DATE,
-  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+  name VARCHAR(255) NOT NULL
 );
 
--- Invoice Items
-CREATE TABLE IF NOT EXISTS invoice_items (
+CREATE TABLE IF NOT EXISTS product_units (
   id VARCHAR(255) PRIMARY KEY,
-  invoice_id VARCHAR(255) REFERENCES sales_invoices(id) ON DELETE CASCADE,
-  product_id VARCHAR(255) REFERENCES products(id) ON DELETE SET NULL,
-  quantity INTEGER NOT NULL,
-  price NUMERIC NOT NULL
+  name VARCHAR(255) NOT NULL
 );
 
--- Purchase Order Items
-CREATE TABLE IF NOT EXISTS purchase_order_items (
+CREATE TABLE IF NOT EXISTS customer_categories (
   id VARCHAR(255) PRIMARY KEY,
-  purchase_order_id VARCHAR(255) REFERENCES purchase_orders(id) ON DELETE CASCADE,
-  product_id VARCHAR(255) REFERENCES products(id) ON DELETE SET NULL,
-  quantity INTEGER NOT NULL,
-  cost NUMERIC NOT NULL
+  name VARCHAR(255) NOT NULL
 );
 
--- Cash Transactions
-CREATE TABLE IF NOT EXISTS cash_transactions (
+CREATE TABLE IF NOT EXISTS vendor_categories (
   id VARCHAR(255) PRIMARY KEY,
-  date DATE DEFAULT CURRENT_DATE,
-  type VARCHAR(10) NOT NULL CHECK (type IN ('IN', 'OUT')),
-  category VARCHAR(255),
-  description TEXT,
-  amount NUMERIC NOT NULL,
-  method VARCHAR(255)
+  name VARCHAR(255) NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS payment_types (
+  id VARCHAR(255) PRIMARY KEY,
+  name VARCHAR(255) NOT NULL
+);
+
+-- ========== 2. SEED MASTER DATA (Default fallback) ==========
+INSERT INTO product_categories (id, name) VALUES ('PC-1', 'Minuman'), ('PC-2', 'Makanan'), ('PC-3', 'Sembako'), ('PC-4', 'Lainnya') ON CONFLICT DO NOTHING;
+INSERT INTO product_units (id, name) VALUES ('PU-1', 'pcs'), ('PU-2', 'box'), ('PU-3', 'botol'), ('PU-4', 'dus'), ('PU-5', 'pack'), ('PU-6', 'sak'), ('PU-7', 'kg'), ('PU-8', 'karton') ON CONFLICT DO NOTHING;
+INSERT INTO customer_categories (id, name) VALUES ('CC-1', 'Reseller'), ('CC-2', 'Warung'), ('CC-3', 'Kafe'), ('CC-4', 'Toko') ON CONFLICT DO NOTHING;
+INSERT INTO vendor_categories (id, name) VALUES ('VC-1', 'Minuman'), ('VC-2', 'Makanan'), ('VC-3', 'Sembako'), ('VC-4', 'Non-Pangan') ON CONFLICT DO NOTHING;
+INSERT INTO payment_types (id, name) VALUES ('PT-1', 'Tunai'), ('PT-2', 'Tempo'), ('PT-3', 'DP'), ('PT-4', 'Transfer') ON CONFLICT DO NOTHING;
+
+
+-- ========== 3. MIGRATE PRODUCTS ==========
+-- Note: SQLite / Postgres have different levels of support for altering to FKs. 
+-- We add the new FK columns first.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS category_id VARCHAR(255) REFERENCES product_categories(id) ON DELETE SET NULL;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS unit_id VARCHAR(255) REFERENCES product_units(id) ON DELETE SET NULL;
+-- After adding, the application should migrate data from category -> category_id and unit -> unit_id.
+-- Once migrated, the old string columns can be dropped (or left for backward compatibility).
+
+
+-- ========== 4. MIGRATE CUSTOMERS ==========
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS customer_category_id VARCHAR(255) REFERENCES customer_categories(id) ON DELETE SET NULL;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS npwp VARCHAR(255);
+-- Rename alamat_lengkap to address
+ALTER TABLE customers RENAME COLUMN alamat_lengkap TO address;
+
+
+-- ========== 5. MIGRATE VENDORS ==========
+ALTER TABLE vendors ADD COLUMN IF NOT EXISTS vendor_category_id VARCHAR(255) REFERENCES vendor_categories(id) ON DELETE SET NULL;
+-- Note: Depending on the DB, DROP COLUMN might fail if unsupported (like older SQLite). 
+-- For Postgres, this is fine:
+ALTER TABLE vendors DROP COLUMN IF EXISTS alamat_lengkap;
+ALTER TABLE vendors DROP COLUMN IF EXISTS nama_bank;
+ALTER TABLE vendors DROP COLUMN IF EXISTS nomor_rek;
+ALTER TABLE vendors DROP COLUMN IF EXISTS pemilik_rek;
+
+
+-- ========== 6. MIGRATE SALES_INVOICES & PURCHASE_ORDERS ==========
+ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS payment_type_id VARCHAR(255) REFERENCES payment_types(id) ON DELETE SET NULL;
+-- Application should migrate data from payment_type to payment_type_id
+
+ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS payment_type_id VARCHAR(255) REFERENCES payment_types(id) ON DELETE SET NULL;
+-- Application should migrate data from payment_type to payment_type_id
+
+
+-- ========== 7. MIGRATE CASH_TRANSACTIONS ==========
+ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS invoice_id VARCHAR(255) REFERENCES sales_invoices(id) ON DELETE SET NULL;
+ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS purchase_order_id VARCHAR(255) REFERENCES purchase_orders(id) ON DELETE SET NULL;
+ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS payment_type_id VARCHAR(255) REFERENCES payment_types(id) ON DELETE SET NULL;
+ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
