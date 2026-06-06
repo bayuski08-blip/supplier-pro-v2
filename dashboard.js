@@ -1310,26 +1310,38 @@ document.getElementById('btn-checkout')?.addEventListener('click', async () => {
             headers: getAuthHeaders(),
             body: JSON.stringify(payload)
         });
-        const result = await res.json();
-        if (res.ok && result.success) {
+        
+        if (res.ok) {
+            const result = await res.json();
             const successDesc = document.querySelector('#modal-checkout-success p');
-            if (successDesc) successDesc.textContent = `Invoice ${result.invoiceId} telah dicatat. Stok produk telah diperbarui secara otomatis.`;
+            if (successDesc) successDesc.innerHTML = `Transaksi berhasil.<br>Nomor Invoice: <b>${result.invoiceId}</b>`;
             openModal('modal-checkout-success');
+            
             cart = [];
             document.getElementById('pos-customer-id').value = '';
             document.getElementById('pos-customer-search').value = '';
+            document.getElementById('cart-payment-type').value = 'PT-1';
+            
             renderCart();
             await fetchProducts();
-            renderPOSProducts(); // Fix: Update POS product list to reflect new stock
+            renderPOSProducts();
             await fetchInvoices();
             await fetchCashTransactions();
             await renderDashboard();
         } else {
-            alert('Gagal membuat invoice: ' + (result.error || 'Terjadi kesalahan'));
+            let errMsg = 'Terjadi kesalahan';
+            try {
+                const errData = await res.json();
+                if (errData.error) errMsg = errData.error;
+            } catch (e) {
+                if (res.status === 401 || res.status === 403) errMsg = 'Sesi telah habis, silakan login kembali.';
+                else errMsg = `Error ${res.status}: Server gagal merespon.`;
+            }
+            showToast('Gagal membuat invoice: ' + errMsg, 'error');
         }
     } catch(err) {
         console.error(err);
-        alert('Gagal menghubungi server');
+        showToast('Gagal menghubungi server', 'error');
     }
 });
 
@@ -2227,8 +2239,18 @@ async function savePurchase(isEdit) {
             await fetchProducts(); // update stock
             renderHutang();
         } else {
-            const err = await res.json();
-            showToast('Error: ' + (err.error || 'Gagal menyimpan PO'), 'error');
+            let errMsg = 'Gagal menyimpan PO';
+            try {
+                const errData = await res.json();
+                if (errData.error) errMsg = errData.error;
+            } catch (e) {
+                if (res.status === 401 || res.status === 403) errMsg = 'Sesi telah habis, silakan login kembali.';
+                else errMsg = `Error ${res.status}: Terjadi kesalahan di server.`;
+            }
+            showToast('Error: ' + errMsg, 'error');
+            if (res.status === 401 || res.status === 403) {
+                setTimeout(() => window.location.reload(), 1500);
+            }
         }
     } catch (err) {
         console.error(err);

@@ -573,7 +573,8 @@ app.post('/api/invoices', authenticateToken, async (req, res) => {
     if (paid > 0) {
       const ctId = 'CT-' + Date.now() + Math.floor(Math.random()*1000);
       const ctDate = new Date().toISOString().split('T')[0];
-      await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, invoice_id, payment_type_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [ctId, ctDate, 'IN', 'Pendapatan', `DP/Pembayaran Invoice ${id}`, paid, 'Transfer Bank', id, payment_type_id]);
+      const method = payment_type_id === 'PT-1' ? 'Tunai' : 'Transfer Bank';
+      await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, invoice_id, payment_type_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [ctId, ctDate, 'IN', 'Penjualan', `DP/Pembayaran Invoice ${id}`, paid, method, id, payment_type_id]);
     }
 
     await client.query('COMMIT');
@@ -1051,7 +1052,8 @@ app.post('/api/purchases', authenticateToken, async (req, res) => {
     
     if (finalPaid > 0) {
       const ctId = 'CT-' + Date.now() + Math.floor(Math.random()*1000);
-      await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, purchase_order_id, payment_type_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [ctId, poDate, 'OUT', 'Pembelian Stok', `Bayar PO ${poId}`, finalPaid, 'Transfer Bank', poId, pType]);
+      const method = pType === 'PT-1' ? 'Tunai' : 'Transfer Bank';
+      await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, purchase_order_id, payment_type_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [ctId, poDate, 'OUT', 'Pembelian Stok', `Bayar PO ${poId}`, finalPaid, method, poId, pType]);
     }
     
     await client.query('COMMIT');
