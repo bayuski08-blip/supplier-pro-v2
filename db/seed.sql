@@ -9,10 +9,11 @@ INSERT INTO customer_categories (id, name) VALUES ('CC-1', 'Reseller'), ('CC-2',
 INSERT INTO vendor_categories (id, name) VALUES ('VC-1', 'Minuman'), ('VC-2', 'Makanan'), ('VC-3', 'Sembako'), ('VC-4', 'Non-Pangan') ON CONFLICT DO NOTHING;
 INSERT INTO payment_types (id, name) VALUES ('PT-1', 'Tunai'), ('PT-2', 'Tempo'), ('PT-3', 'DP'), ('PT-4', 'Transfer') ON CONFLICT DO NOTHING;
 
--- Admin user
-INSERT INTO users (username, name, email, password_hash, role, active) 
-VALUES ('admin', 'Administrator', 'admin@supplierpro.id', 'admin123', 'admin', true) 
+-- Admin user (id=1 eksplisit agar FK cash_transactions.user_id valid)
+INSERT INTO users (id, username, name, email, password_hash, role, active) 
+VALUES (1, 'admin', 'Administrator', 'admin@supplierpro.id', 'admin123', 'admin', true) 
 ON CONFLICT (username) DO NOTHING;
+SELECT setval('users_id_seq', (SELECT COALESCE(MAX(id), 1) FROM users));
 
 -- Products (dengan kolom FK unit_id dan category_id)
 INSERT INTO products (id, sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id, badge) 
