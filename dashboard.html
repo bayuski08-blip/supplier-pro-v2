@@ -68,9 +68,9 @@
                 <div class="nav-item" data-page="cashflow" id="nav-cashflow">
                     <i data-lucide="arrow-right-left"></i> Arus Kas
                 </div>
-                <div class="nav-item" data-page="profitloss" id="nav-profitloss">
+                <a href="laporan-laba-rugi.html" class="nav-item" id="nav-profitloss" style="text-decoration: none; color: inherit;">
                     <i data-lucide="trending-up"></i> Laba Rugi
-                </div>
+                </a>
                 <div class="nav-item" data-page="balance" id="nav-balance">
                     <i data-lucide="scale"></i> Neraca
                 </div>
@@ -665,11 +665,6 @@
                             <button class="tab-filter" data-filter="in">Kas Masuk</button>
                             <button class="tab-filter" data-filter="out">Kas Keluar</button>
                         </div>
-                        <select class="filter-select" id="cashflow-status-filter" onchange="renderCashFlow()">
-                            <option value="all">Semua Status</option>
-                            <option value="active">Aktif</option>
-                            <option value="cancelled">Dibatalkan</option>
-                        </select>
                     </div>
                     <div class="page-toolbar-right">
                         <button class="btn-toolbar primary" onclick="openModal('modal-add-cash')">
@@ -698,35 +693,6 @@
                 </div>
             </section>
 
-            <!-- ============================================================
-                 PAGE 11: LABA RUGI
-                 ============================================================ -->
-            <section class="page-section" id="page-profitloss">
-                <div class="page-toolbar">
-                    <div class="page-toolbar-left">
-                        <div class="period-selector">
-                            <select class="filter-select">
-                                <option>Juni 2026</option>
-                                <option>Mei 2026</option>
-                                <option>April 2026</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="page-toolbar-right">
-                        <button class="btn-toolbar secondary">
-                            <i data-lucide="download"></i> Export PDF
-                        </button>
-                    </div>
-                </div>
-
-                <div class="finance-summary" id="pl-summary">
-                    <!-- Filled by JS -->
-                </div>
-
-                <div class="finance-breakdown" id="pl-breakdown">
-                    <!-- Filled by JS -->
-                </div>
-            </section>
 
             <!-- ============================================================
                  PAGE 12: NERACA

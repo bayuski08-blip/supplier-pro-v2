@@ -86,7 +86,17 @@ VALUES
   ('CT0002', '2026-06-02', 'IN', 'Penjualan', 'DP dari Kafe Nusantara', 2000000, 'Transfer Bank', 'INV/2026/06/0040', NULL, 'PT-3', 1),
   ('CT0003', '2026-06-02', 'OUT', 'Pembelian Stok', 'Bayar PO/2026/06/0018', 15600000, 'Transfer Bank', NULL, 'PO/2026/06/0018', 'PT-1', 1),
   ('CT0004', '2026-06-01', 'IN', 'Penjualan', 'Pembayaran tunai Warung Sari Rasa', 1250000, 'Tunai', 'INV/2026/06/0038', NULL, 'PT-1', 1),
-  ('CT0005', '2026-06-01', 'OUT', 'Operasional', 'Listrik & air gudang', 2500000, 'Transfer Bank', NULL, NULL, NULL, 1)
+  ('CT0005', '2026-06-01', 'OUT', 'Operasional', 'Listrik & air gudang', 2500000, 'Transfer Bank', NULL, NULL, NULL, 1),
+  ('CT0006', '2026-06-04', 'OUT', 'Operasional', 'Biaya internet bulanan', 500000, 'Transfer Bank', NULL, NULL, NULL, 1),
+  ('CT0007', '2026-06-05', 'OUT', 'Gaji', 'Pembayaran gaji karyawan bulan Mei', 12000000, 'Transfer Bank', NULL, NULL, NULL, 1),
+  ('CT0008', '2026-06-05', 'OUT', 'Sewa', 'Sewa ruko bulan Juni', 5000000, 'Transfer Bank', NULL, NULL, NULL, 1),
+  ('CT0009', '2026-06-06', 'IN', 'Lainnya', 'Cashback promo bank', 150000, 'Transfer Bank', NULL, NULL, NULL, 1),
+  ('CT0010', '2026-06-06', 'OUT', 'Operasional', 'Beli atk dan perlengkapan gudang', 350000, 'Tunai', NULL, NULL, NULL, 1),
+  ('CT0011', '2026-06-07', 'OUT', 'Lainnya', 'Biaya kebersihan dan keamanan', 200000, 'Tunai', NULL, NULL, NULL, 1),
+  ('CT0012', '2026-06-07', 'IN', 'Lainnya', 'Penjualan kardus bekas', 75000, 'Tunai', NULL, NULL, NULL, 1),
+  ('CT0013', '2026-06-08', 'OUT', 'Operasional', 'Bensin untuk kendaraan operasional', 300000, 'Tunai', NULL, NULL, NULL, 1),
+  ('CT0014', '2026-06-09', 'OUT', 'Operasional', 'Konsumsi lembur tim gudang', 250000, 'QRIS', NULL, NULL, NULL, 1),
+  ('CT0015', '2026-06-10', 'IN', 'Lainnya', 'Bonus dari supplier', 1000000, 'Transfer Bank', NULL, NULL, NULL, 1)
 ON CONFLICT (id) DO NOTHING;
 
 -- Seed default prefix settings

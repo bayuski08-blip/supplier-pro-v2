@@ -775,6 +775,111 @@ app.patch('/api/finance/cash-flow/:id/cancel', authenticateToken, async (req, re
   }
 });
 
+// --- Laba Rugi Endpoint ---
+app.get('/api/laporan/laba-rugi', authenticateToken, async (req, res) => {
+  const bulan = parseInt(req.query.bulan);
+  const tahun = parseInt(req.query.tahun);
+  
+  if (!bulan || !tahun) {
+    return res.status(400).json({ error: 'Parameter bulan dan tahun diperlukan' });
+  }
+
+  const client = await pool.connect();
+  try {
+    // 1. PENDAPATAN (Penjualan kotor & diskon)
+    // Extract sales_invoices matching month/year and status != 'Dibatalkan'
+    const resPendapatan = await client.query(`
+      SELECT SUM(total) as kotor, SUM(discount) as diskon 
+      FROM sales_invoices 
+      WHERE EXTRACT(MONTH FROM date) = $1 
+        AND EXTRACT(YEAR FROM date) = $2 
+        AND status != 'Dibatalkan'
+    `, [bulan, tahun]);
+
+    const penjualanKotor = parseFloat(resPendapatan.rows[0]?.kotor || 0);
+    const diskon = parseFloat(resPendapatan.rows[0]?.diskon || 0);
+    const penjualanBersih = penjualanKotor - diskon;
+
+    // 2. HPP (Pembelian)
+    // From purchase_orders where status = 'Selesai'
+    const resHPP = await client.query(`
+      SELECT SUM(total) as hpp 
+      FROM purchase_orders 
+      WHERE EXTRACT(MONTH FROM date) = $1 
+        AND EXTRACT(YEAR FROM date) = $2 
+        AND status = 'Selesai'
+    `, [bulan, tahun]);
+    const hpp = parseFloat(resHPP.rows[0]?.hpp || 0);
+    const labaKotor = penjualanBersih - hpp;
+
+    // 3. BEBAN OPERASIONAL (Cash transactions OUT, category Operasional/Gaji/Sewa, no invoice/PO)
+    // To be generic, any OUT transaction not related to purchasing stock or related to PO
+    // The requirement says: category = 'Operasional' BUT we also seeded 'Gaji', 'Sewa', etc.
+    // So we will group by category for OUT transactions where invoice_id is null and po_id is null, 
+    // and category != 'Pembelian Stok'
+    const resBeban = await client.query(`
+      SELECT category, SUM(amount) as total 
+      FROM cash_transactions 
+      WHERE type = 'OUT' 
+        AND (status IS NULL OR status != 'cancelled')
+        AND invoice_id IS NULL 
+        AND purchase_order_id IS NULL
+        AND category != 'Pembelian Stok'
+        AND EXTRACT(MONTH FROM date) = $1 
+        AND EXTRACT(YEAR FROM date) = $2
+      GROUP BY category
+    `, [bulan, tahun]);
+
+    const rincianBeban = resBeban.rows.map(r => ({
+      category: r.category,
+      total: parseFloat(r.total)
+    }));
+    const totalBebanOperasional = rincianBeban.reduce((sum, item) => sum + item.total, 0);
+    const labaOperasional = labaKotor - totalBebanOperasional;
+
+    // 4. PENDAPATAN LAIN-LAIN
+    // From cash transactions IN, category != 'Penjualan'
+    const resLain = await client.query(`
+      SELECT SUM(amount) as total 
+      FROM cash_transactions 
+      WHERE type = 'IN' 
+        AND (status IS NULL OR status != 'cancelled')
+        AND category != 'Penjualan'
+        AND EXTRACT(MONTH FROM date) = $1 
+        AND EXTRACT(YEAR FROM date) = $2
+    `, [bulan, tahun]);
+    const pendapatanLain = parseFloat(resLain.rows[0]?.total || 0);
+
+    // LABA BERSIH
+    const labaBersih = labaOperasional + pendapatanLain;
+
+    res.json({
+      success: true,
+      data: {
+        pendapatan: {
+          kotor: penjualanKotor,
+          diskon: diskon,
+          bersih: penjualanBersih
+        },
+        hpp: hpp,
+        labaKotor: labaKotor,
+        operasional: {
+          rincian: rincianBeban,
+          total: totalBebanOperasional
+        },
+        labaOperasional: labaOperasional,
+        pendapatanLain: pendapatanLain,
+        labaBersih: labaBersih
+      }
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 app.get('/api/finance/payables', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query('SELECT po.*, v.name as vendor_name FROM purchase_orders po LEFT JOIN vendors v ON po.vendor_id = v.id WHERE po.status != $1 AND po.status != $2', ['Selesai', 'Batal']);

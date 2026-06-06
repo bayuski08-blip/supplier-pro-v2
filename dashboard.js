@@ -836,11 +836,6 @@ function renderCashFlow(filter = '') {
     if (filter === 'in') filtered = filtered.filter(t => t.type === 'IN');
     if (filter === 'out') filtered = filtered.filter(t => t.type === 'OUT');
 
-    // Filter status
-    const statusFilter = document.getElementById('cashflow-status-filter') ? document.getElementById('cashflow-status-filter').value : 'all';
-    if (statusFilter === 'active') filtered = filtered.filter(t => (t.status || 'active') === 'active');
-    if (statusFilter === 'cancelled') filtered = filtered.filter(t => t.status === 'cancelled');
-
     tbody.innerHTML = filtered.map(t => {
         const isCancelled = t.status === 'cancelled';
         const isManual = t.isManual && t.category !== 'Penyesuaian Stok';
@@ -866,46 +861,6 @@ function renderCashFlow(filter = '') {
     if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
-
-// ---------- Profit & Loss Page ----------
-function renderProfitLoss() {
-    const pendapatan = 43050000;
-    const hpp = 27100000;
-    const labaKotor = pendapatan - hpp;
-    const bebanOperasional = 8500000;
-    const bebanSewa = 5000000;
-    const bebanListrik = 2500000;
-    const totalBeban = bebanOperasional + bebanSewa + bebanListrik;
-    const labaBersih = labaKotor - totalBeban;
-
-    document.getElementById('pl-summary').innerHTML = `
-        <div class="finance-summary-card">
-            <div class="fs-value">${rp(pendapatan)}</div>
-            <div class="fs-label">Total Pendapatan</div>
-        </div>
-        <div class="finance-summary-card">
-            <div class="fs-value" style="color: var(--rose-500);">${rp(totalBeban + hpp)}</div>
-            <div class="fs-label">Total Beban & HPP</div>
-        </div>
-        <div class="finance-summary-card highlight">
-            <div class="fs-value">${rp(labaBersih)}</div>
-            <div class="fs-label">Laba Bersih</div>
-        </div>
-    `;
-
-    document.getElementById('pl-breakdown').innerHTML = `
-        <div class="finance-breakdown-header"><h3>Laporan Laba Rugi — Juni 2026</h3></div>
-        <div class="finance-breakdown-row"><span class="fb-label"><strong>Pendapatan Penjualan</strong></span><span class="fb-value">${rp(pendapatan)}</span></div>
-        <div class="finance-breakdown-row indent"><span class="fb-label">Harga Pokok Penjualan (HPP)</span><span class="fb-value" style="color:var(--rose-500);">(${rp(hpp)})</span></div>
-        <div class="finance-breakdown-row total"><span class="fb-label">Laba Kotor</span><span class="fb-value">${rp(labaKotor)}</span></div>
-        <div class="finance-breakdown-row"><span class="fb-label"><strong>Beban Operasional</strong></span><span class="fb-value"></span></div>
-        <div class="finance-breakdown-row indent"><span class="fb-label">Gaji Karyawan</span><span class="fb-value" style="color:var(--rose-500);">(${rp(bebanOperasional)})</span></div>
-        <div class="finance-breakdown-row indent"><span class="fb-label">Sewa Gudang</span><span class="fb-value" style="color:var(--rose-500);">(${rp(bebanSewa)})</span></div>
-        <div class="finance-breakdown-row indent"><span class="fb-label">Listrik & Utilitas</span><span class="fb-value" style="color:var(--rose-500);">(${rp(bebanListrik)})</span></div>
-        <div class="finance-breakdown-row total"><span class="fb-label">Total Beban Operasional</span><span class="fb-value" style="color:var(--rose-500);">(${rp(totalBeban)})</span></div>
-        <div class="finance-breakdown-row profit"><span class="fb-label"><strong>Laba Bersih</strong></span><span class="fb-value"><strong>${rp(labaBersih)}</strong></span></div>
-    `;
-}
 
 // ---------- Balance Sheet Page ----------
 function renderBalance() {
