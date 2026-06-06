@@ -437,9 +437,9 @@ app.get('/api/purchases/:id/items', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/invoices', authenticateToken, async (req, res) => {
-  const { customer_id, total, paid, payment_type_id, items } = req.body;
+  const { customer_id, total, paid, payment_type_id, due_date, items } = req.body;
   
-  const insertInvoiceQuery = 'INSERT INTO sales_invoices (id, date, customer_id, total, paid_amount, payment_type_id, status) VALUES ($1, $2, $3, $4, $5, $6, $7)';
+  const insertInvoiceQuery = 'INSERT INTO sales_invoices (id, date, customer_id, total, paid_amount, payment_type_id, due_date, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)';
   const updateStockQuery = 'UPDATE products SET stock = stock - $1 WHERE id = $2';
   
   const id = 'INV-' + Date.now();
@@ -449,7 +449,7 @@ app.post('/api/invoices', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query(insertInvoiceQuery, [id, date, customer_id, total, paid, payment_type_id, status]);
+    await client.query(insertInvoiceQuery, [id, date, customer_id, total, paid, payment_type_id, due_date, status]);
     
     // Reduce stock
     if (items && Array.isArray(items)) {
@@ -660,7 +660,7 @@ app.get('/api/purchases', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/purchases', authenticateToken, async (req, res) => {
-  const { vendor_id, vendorId, date, total, paid, paid_amount, payment_type_id, items } = req.body;
+  const { vendor_id, vendorId, date, total, paid, paid_amount, payment_type_id, due_date, items } = req.body;
   const vId = vendor_id || vendorId;
   const pType = payment_type_id || 'PT-1';
   const finalPaid = parseFloat(paid || paid_amount || 0);
@@ -672,7 +672,7 @@ app.post('/api/purchases', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('INSERT INTO purchase_orders (id, date, vendor_id, total, paid_amount, payment_type_id, status) VALUES ($1, $2, $3, $4, $5, $6, $7)', [poId, poDate, vId, finalTotal, finalPaid, pType, status]);
+    await client.query('INSERT INTO purchase_orders (id, date, vendor_id, total, paid_amount, payment_type_id, due_date, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [poId, poDate, vId, finalTotal, finalPaid, pType, due_date, status]);
     
     if (items && Array.isArray(items)) {
       for (const item of items) {
@@ -703,7 +703,7 @@ app.post('/api/purchases', authenticateToken, async (req, res) => {
 
 app.put('/api/purchases/:id', authenticateToken, async (req, res) => {
   const poId = req.params.id;
-  const { vendor_id, vendorId, date, total, paid, paid_amount, payment_type_id, items } = req.body;
+  const { vendor_id, vendorId, date, total, paid, paid_amount, payment_type_id, due_date, items } = req.body;
   const vId = vendor_id || vendorId;
   const pType = payment_type_id || 'PT-1';
   const finalPaid = parseFloat(paid || paid_amount || 0);
@@ -734,7 +734,7 @@ app.put('/api/purchases/:id', authenticateToken, async (req, res) => {
       }
     }
     
-    await client.query('UPDATE purchase_orders SET date = $1, vendor_id = $2, total = $3, paid_amount = $4, status = $5, payment_type_id = $6 WHERE id = $7', [poDate, vId, finalTotal, finalPaid, status, pType, poId]);
+    await client.query('UPDATE purchase_orders SET date = $1, vendor_id = $2, total = $3, paid_amount = $4, status = $5, payment_type_id = $6, due_date = $7 WHERE id = $8', [poDate, vId, finalTotal, finalPaid, status, pType, due_date, poId]);
     
     await client.query('DELETE FROM cash_transactions WHERE purchase_order_id = $1', [poId]);
     if (finalPaid > 0) {
@@ -789,7 +789,7 @@ app.put('/api/purchases/:id/cancel', authenticateToken, async (req, res) => {
 // --- Sales Invoices Extra CRUD ---
 app.put('/api/invoices/:id', authenticateToken, async (req, res) => {
   const invId = req.params.id;
-  const { customer_id, customerId, date, total, paid, paid_amount, payment_type_id, items } = req.body;
+  const { customer_id, customerId, date, total, paid, paid_amount, payment_type_id, due_date, items } = req.body;
   const custId = customer_id || customerId;
   const pType = payment_type_id || 'PT-1';
   const finalPaid = parseFloat(paid || paid_amount || 0);
@@ -820,7 +820,11 @@ app.put('/api/invoices/:id', authenticateToken, async (req, res) => {
       }
     }
     
-    await client.query('UPDATE sales_invoices SET date = $1, customer_id = $2, subtotal = $3, total = $4, paid_amount = $5, status = $6, payment_type_id = $7 WHERE id = $8', [invDate, custId, finalTotal, finalTotal, finalPaid, status, pType, invId]);
+    if (due_date !== undefined) {
+      await client.query('UPDATE sales_invoices SET date = $1, customer_id = $2, subtotal = $3, total = $4, paid_amount = $5, status = $6, payment_type_id = $7, due_date = $8 WHERE id = $9', [invDate, custId, finalTotal, finalTotal, finalPaid, status, pType, due_date, invId]);
+    } else {
+      await client.query('UPDATE sales_invoices SET date = $1, customer_id = $2, subtotal = $3, total = $4, paid_amount = $5, status = $6, payment_type_id = $7 WHERE id = $8', [invDate, custId, finalTotal, finalTotal, finalPaid, status, pType, invId]);
+    }
     
     await client.query('DELETE FROM cash_transactions WHERE invoice_id = $1', [invId]);
     if (finalPaid > 0) {

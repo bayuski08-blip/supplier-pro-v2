@@ -714,7 +714,8 @@ function renderPiutang(filter = '') {
 
     // Table
     const tbody = document.getElementById('piutang-body');
-    let filtered = INVOICES.filter(i => i.type === 'Tempo' || i.type === 'DP');
+    // Show all invoices that are not "Lunas" or "Batal"
+    let filtered = INVOICES.filter(i => i.status.toLowerCase() !== 'lunas' && i.status.toLowerCase() !== 'batal');
     if (filter && filter !== 'all') {
         filtered = filtered.filter(i => i.status.toLowerCase() === filter);
     }
@@ -1174,6 +1175,7 @@ document.getElementById('btn-checkout')?.addEventListener('click', async () => {
         total: total,
         paid: paid,
         payment_type_id: payment_type_id,
+        due_date: calculateDueDate(getPaymentTypeName(paymentTypeSelect), new Date().toISOString()),
         items: cart.map(item => ({
             id: item.id,
             quantity: item.qty,
@@ -1320,6 +1322,46 @@ function capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+function calculateDueDate(paymentTypeName, transactionDateStr) {
+    if (!paymentTypeName || !paymentTypeName.toLowerCase().includes('credit')) return '';
+    const match = paymentTypeName.match(/credit\s+(\d+)\s+hari/i);
+    if (match && match[1]) {
+        const days = parseInt(match[1], 10);
+        const date = new Date(transactionDateStr);
+        if (!isNaN(date.getTime())) {
+            date.setDate(date.getDate() + days);
+            return date.toISOString().split('T')[0];
+        }
+    }
+    return '';
+}
+
+function getPaymentTypeName(selectElement) {
+    if (!selectElement) return '';
+    if (selectElement.options.length === 0) return '';
+    return selectElement.options[selectElement.selectedIndex].text;
+}
+
+function onPurchasePaymentTypeChange(mode) {
+    const typeSelect = document.getElementById(`${mode}-purchase-payment-type`);
+    const dateInput = document.getElementById(`${mode}-purchase-date`);
+    const dueDateGroup = document.getElementById(`${mode}-purchase-duedate-group`);
+    const dueDateInput = document.getElementById(`${mode}-purchase-due-date`);
+    
+    if (!typeSelect || !dueDateGroup) return;
+    
+    const typeName = getPaymentTypeName(typeSelect);
+    if (typeName.toLowerCase().includes('credit')) {
+        dueDateGroup.style.display = 'block';
+        if (dateInput && dateInput.value) {
+            dueDateInput.value = calculateDueDate(typeName, dateInput.value);
+        }
+    } else {
+        dueDateGroup.style.display = 'none';
+        dueDateInput.value = '';
+    }
+}
+
 // ---------- Initialize Everything ----------
 async function init() {
     // Render empty placeholders while loading
@@ -1354,10 +1396,9 @@ async function init() {
     populateCustomerSelect();
 
     const btnAddPoItem = document.getElementById('btn-add-purchase-item');
-    if (btnAddPoItem) btnAddPoItem.addEventListener('click', () => addPurchaseItemRow('add-purchase-items-container'));
+    if (btnAddPoItem) btnAddPoItem.addEventListener('click', () => { if (window.addAddPurchaseItem) window.addAddPurchaseItem(); });
     
-    const btnEditPoItem = document.getElementById('btn-edit-purchase-item');
-    if (btnEditPoItem) btnEditPoItem.addEventListener('click', () => addPurchaseItemRow('edit-purchase-items-container'));
+    // Edit item button is dynamically added with onclick in HTML, so we don't need to bind it here unless missing
 
     // Initialize Lucide icons
     if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -1753,6 +1794,93 @@ async function fetchPurchases() {
     }
 }
 
+let addPurchaseItems = [];
+
+function renderAddPurchaseItems() {
+    const container = document.getElementById('add-purchase-items-container');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    let subtotal = 0;
+    
+    addPurchaseItems.forEach((item, index) => {
+        const product = PRODUCTS.find(p => p.id === item.product_id) || { name: item.product_id, unit: 'pcs' };
+        const itemTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.price) || 0);
+        subtotal += itemTotal;
+        
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="padding: 0.5rem;">
+                <div style="font-weight: 500; color: var(--gray-900);">${product.name}</div>
+            </td>
+            <td style="padding: 0.5rem; text-align: center;">
+                <input type="number" min="1" value="${item.quantity}" onchange="updateAddPurchaseItemQty(${index}, this.value)" style="width: 60px; padding: 0.25rem; border: 1px solid var(--gray-200); border-radius: 0.25rem; text-align: center;">
+            </td>
+            <td style="padding: 0.5rem; text-align: right;">
+                <div style="display:flex; align-items:center; justify-content:flex-end; gap:0.25rem;">
+                    <span style="font-size:0.75rem; color:var(--gray-500);">Rp</span>
+                    <input type="number" value="${item.price}" onchange="updateAddPurchaseItemPrice(${index}, this.value)" style="width: 80px; padding: 0.25rem; border: 1px solid var(--gray-200); border-radius: 0.25rem; text-align: right;">
+                </div>
+            </td>
+            <td style="padding: 0.5rem; text-align: right; font-weight: 600; color: var(--gray-900);">
+                ${rp(itemTotal)}
+            </td>
+            <td style="padding: 0.5rem; text-align: center;">
+                <button type="button" onclick="removeAddPurchaseItem(${index})" style="color: var(--rose-500); background: none; border: none; cursor: pointer; padding: 0.25rem;">
+                    <i data-lucide="trash-2" style="width: 16px; height: 16px;"></i>
+                </button>
+            </td>
+        `;
+        container.appendChild(tr);
+    });
+    
+    if (addPurchaseItems.length === 0) {
+        container.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 1rem; color: var(--gray-500);">Belum ada item.</td></tr>`;
+    }
+    
+    document.getElementById('add-purchase-subtotal-display').textContent = rp(subtotal);
+    document.getElementById('add-purchase-total-display').textContent = rp(subtotal);
+    
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+window.addAddPurchaseItem = () => {
+    const select = document.getElementById('add-purchase-product-select');
+    if (!select || !select.value) return;
+    
+    const prod = PRODUCTS.find(p => p.id === select.value);
+    if (!prod) return;
+    
+    const existing = addPurchaseItems.find(i => i.product_id === prod.id);
+    if (existing) {
+        existing.quantity += 1;
+    } else {
+        addPurchaseItems.push({
+            product_id: prod.id,
+            quantity: 1,
+            price: prod.cost || prod.price || 0
+        });
+    }
+    renderAddPurchaseItems();
+};
+
+window.removeAddPurchaseItem = (index) => {
+    addPurchaseItems.splice(index, 1);
+    renderAddPurchaseItems();
+};
+
+window.updateAddPurchaseItemQty = (index, val) => {
+    const qty = parseInt(val);
+    addPurchaseItems[index].quantity = qty > 0 ? qty : 1;
+    renderAddPurchaseItems();
+};
+
+window.updateAddPurchaseItemPrice = (index, val) => {
+    const price = parseFloat(val);
+    if (price >= 0) addPurchaseItems[index].price = price;
+    renderAddPurchaseItems();
+};
+
 // FIX: open add-purchase modal with cleared form
 function openAddPurchaseModal() {
     // Reset all fields
@@ -1760,13 +1888,23 @@ function openAddPurchaseModal() {
     const dateEl   = document.getElementById('add-purchase-date');
     const paidEl   = document.getElementById('add-purchase-paid');
     const ptEl     = document.getElementById('add-purchase-payment-type');
+    const selectEl = document.getElementById('add-purchase-product-select');
+    
     if (vendorEl) vendorEl.selectedIndex = 0;
     if (dateEl)   dateEl.value = new Date().toISOString().split('T')[0];
     if (paidEl)   paidEl.value = '';
     if (ptEl)     ptEl.selectedIndex = 0;
-    // Clear items container
-    const itemsContainer = document.getElementById('add-purchase-items-container');
-    if (itemsContainer) itemsContainer.innerHTML = '';
+    
+    // Populate product select if not populated yet
+    if (selectEl && selectEl.options.length <= 1) {
+        const productOptions = PRODUCTS.map(p => `<option value="${p.id}">${p.name} (Stok: ${p.stock})</option>`).join('');
+        selectEl.innerHTML = `<option value="" disabled selected>Pilih Produk...</option>${productOptions}`;
+    }
+    
+    onPurchasePaymentTypeChange('add');
+    
+    addPurchaseItems = [];
+    renderAddPurchaseItems();
     openModal('modal-add-purchase');
 }
 
@@ -1912,14 +2050,7 @@ async function savePurchase(isEdit) {
     if (isEdit) {
         itemsToSave = editPurchaseItems.map(i => ({ product_id: i.product_id, qty: i.quantity, price: i.price, total: i.quantity * i.price }));
     } else {
-        document.querySelectorAll(`.${prefix}-purchase-item`).forEach(row => {
-            const product_id = row.querySelector('.item-product').value;
-            const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
-            const price = parseFloat(row.querySelector('.item-price').value) || 0;
-            if (product_id && qty > 0) {
-                itemsToSave.push({ product_id, qty, price, total: qty * price });
-            }
-        });
+        itemsToSave = addPurchaseItems.map(i => ({ product_id: i.product_id, qty: i.quantity, price: i.price, total: i.quantity * i.price }));
     }
 
     if (itemsToSave.length === 0) {
@@ -1929,12 +2060,18 @@ async function savePurchase(isEdit) {
 
     const total = itemsToSave.reduce((s, i) => s + i.total, 0);
 
+    let dueDate = document.getElementById(`${prefix}-purchase-due-date`)?.value || '';
+    if (!dueDate) {
+        dueDate = calculateDueDate(getPaymentTypeName(document.getElementById(`${prefix}-purchase-payment-type`)), document.getElementById(`${prefix}-purchase-date`)?.value);
+    }
+    
     const payload = {
         vendor_id: document.getElementById(`${prefix}-purchase-vendor`)?.value || '',
         date: document.getElementById(`${prefix}-purchase-date`)?.value || '',
         total: total,
         paid: parseFloat(document.getElementById(`${prefix}-purchase-paid`)?.value || 0),
         payment_type_id: document.getElementById(`${prefix}-purchase-payment-type`)?.value || '',
+        due_date: dueDate,
         items: itemsToSave
     };
 
@@ -2480,8 +2617,9 @@ async function populateMasterDropdowns() {
 
         await fetchAndFill('/api/master/product-categories', ['add-product-category', 'edit-product-category'], 'id', 'name');
         await fetchAndFill('/api/master/product-units', ['add-product-unit', 'edit-product-unit'], 'id', 'name');
+        await fetchAndFill('/api/master/customer-categories', ['add-customer-type', 'edit-customer-type'], 'id', 'name');
         await fetchAndFill('/api/master/vendor-categories', ['add-vendor-category', 'edit-vendor-category'], 'id', 'name');
-        await fetchAndFill('/api/master/payment-types', ['cart-payment-type', 'add-purchase-payment-type', 'edit-purchase-payment-type', 'payment-method'], 'id', 'name');
+        await fetchAndFill('/api/master/payment-types', ['cart-payment-type', 'add-purchase-payment-type', 'edit-purchase-payment-type', 'edit-invoice-payment-type', 'payment-method'], 'id', 'name');
     } catch (err) {
         console.error('Failed to populate master dropdowns', err);
     }

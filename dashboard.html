@@ -530,7 +530,7 @@
                         <select class="filter-select" id="invoice-status-filter" onchange="renderInvoices()">
                             <option value="all">Semua Status</option>
                             <option value="lunas">Lunas</option>
-                            <option value="belum">Belum Bayar</option>
+                            <option value="belum bayar">Belum Bayar</option>
                             <option value="sebagian">Sebagian</option>
                             <option value="batal">Batal</option>
                         </select>
@@ -578,7 +578,7 @@
                         </div>
                         <select class="filter-select" id="piutang-status-filter" onchange="renderPiutang()">
                             <option value="all">Semua Status</option>
-                            <option value="belum">Belum Bayar</option>
+                            <option value="belum bayar">Belum Bayar</option>
                             <option value="sebagian">Sebagian</option>
                             <option value="lunas">Lunas</option>
                         </select>
@@ -622,7 +622,8 @@
                         </div>
                         <select class="filter-select" id="hutang-status-filter" onchange="renderHutang()">
                             <option value="all">Semua Status</option>
-                            <option value="belum">Belum Bayar</option>
+                            <option value="belum bayar">Belum Bayar</option>
+                            <option value="sebagian">Sebagian</option>
                             <option value="lunas">Lunas</option>
                         </select>
                     </div>
@@ -1197,10 +1198,8 @@
                 <div class="form-group">
                     <label>Tipe</label>
                     <select id="add-customer-type" class="form-input">
-                        <option value="Reseller">Reseller</option>
-                        <option value="Warung">Warung</option>
-                        <option value="Kafe">Kafe</option>
-                        <option value="Toko">Toko</option>
+                        <option value="" disabled selected>— Pilih Tipe —</option>
+                        <!-- Populated by JS from master data -->
                     </select>
                 </div>
                 <div class="form-group">
@@ -1249,10 +1248,8 @@
                 <div class="form-group">
                     <label>Tipe</label>
                     <select id="edit-customer-type" class="form-input">
-                        <option value="Reseller">Reseller</option>
-                        <option value="Warung">Warung</option>
-                        <option value="Kafe">Kafe</option>
-                        <option value="Toko">Toko</option>
+                        <option value="" disabled selected>— Pilih Tipe —</option>
+                        <!-- Populated by JS from master data -->
                     </select>
                 </div>
                 <div class="form-group">
@@ -1469,13 +1466,22 @@
 
 <!-- Add Purchase Modal -->
 <div class="modal-overlay" id="modal-add-purchase">
-    <div class="modal" style="max-width: 640px;">
+    <div class="modal" style="max-width: 800px;">
         <div class="modal-header">
             <h3>Buat Purchase Order</h3>
             <button class="modal-close" onclick="closeModal('modal-add-purchase')"><i data-lucide="x"></i></button>
         </div>
         <div class="modal-body">
+            <!-- Header Info -->
             <div class="form-row">
+                <div class="form-group">
+                    <label>No. PO (Otomatis)</label>
+                    <input type="text" class="form-input" placeholder="Otomatis dari Sistem" disabled>
+                </div>
+                <div class="form-group">
+                    <label>Tanggal</label>
+                    <input type="date" id="add-purchase-date" class="form-input">
+                </div>
                 <div class="form-group">
                     <label>Vendor</label>
                     <select id="add-purchase-vendor" class="form-input">
@@ -1483,53 +1489,98 @@
                         <!-- Populated by JS -->
                     </select>
                 </div>
-                <div class="form-group">
-                    <label>Tanggal</label>
-                    <input type="date" id="add-purchase-date" class="form-input" value="2026-06-05">
-                </div>
             </div>
-            
+
+            <!-- Products List -->
             <hr style="border: 0; border-top: 1px dashed var(--gray-200); margin: 1rem 0;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                 <label style="margin-bottom: 0; font-weight: 600;">Daftar Item</label>
-                <button type="button" class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" id="btn-add-purchase-item"><i data-lucide="plus"></i> Tambah Item</button>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <select id="add-purchase-product-select" class="form-input" style="width: 220px;">
+                        <!-- Filled by JS -->
+                    </select>
+                    <button type="button" class="btn-toolbar secondary" style="padding: 0.25rem 0.75rem; font-size: 0.8rem;" id="btn-add-purchase-item"><i data-lucide="plus"></i> Tambah Item</button>
+                </div>
             </div>
-            
-            <div id="add-purchase-items-container">
-                <!-- Dynamically filled by JS -->
+
+            <div style="background: white; border: 1px solid var(--gray-200); border-radius: 0.5rem; overflow: hidden; margin-bottom: 1rem;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+                    <thead style="background: var(--gray-50); border-bottom: 1px solid var(--gray-200);">
+                        <tr>
+                            <th style="padding: 0.75rem; text-align: left; color: var(--gray-600); font-weight: 600;">Produk</th>
+                            <th style="padding: 0.75rem; text-align: center; color: var(--gray-600); font-weight: 600; width: 100px;">Qty</th>
+                            <th style="padding: 0.75rem; text-align: right; color: var(--gray-600); font-weight: 600; width: 150px;">Harga Beli</th>
+                            <th style="padding: 0.75rem; text-align: right; color: var(--gray-600); font-weight: 600; width: 150px;">Subtotal</th>
+                            <th style="padding: 0.75rem; text-align: center; width: 50px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="add-purchase-items-container">
+                        <!-- Dynamically filled by JS -->
+                    </tbody>
+                </table>
             </div>
 
             <hr style="border: 0; border-top: 1px dashed var(--gray-200); margin: 1rem 0;">
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Pembayaran</label>
-                    <select id="add-purchase-payment-type" class="form-input">
-                        <!-- Filled by JS -->
-                    </select>
+
+            <!-- Summary & Payment -->
+            <div class="form-row" style="align-items: flex-end;">
+                <div class="form-group" style="flex: 1;">
+                    <div class="form-group">
+                        <label>Tipe Pembayaran</label>
+                        <select id="add-purchase-payment-type" class="form-input" onchange="onPurchasePaymentTypeChange('add')">
+                            <!-- Filled by JS -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Jumlah Bayar (Rp)</label>
+                        <input type="number" id="add-purchase-paid" class="form-input" placeholder="0">
+                    </div>
+                    <div class="form-group" id="add-purchase-duedate-group" style="display: none;">
+                        <label>Tanggal Jatuh Tempo</label>
+                        <input type="date" id="add-purchase-due-date" class="form-input">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Jumlah Bayar (Rp)</label>
-                    <input type="number" id="add-purchase-paid" class="form-input" placeholder="0">
+                <div style="flex: 1; padding: 1rem; background: var(--gray-50); border-radius: 0.5rem; border: 1px solid var(--gray-200);">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                        <span style="color: var(--gray-600); font-size: 0.875rem;">Total Item</span>
+                        <span id="add-purchase-subtotal-display">Rp 0</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--gray-200); padding-top: 0.5rem; margin-top: 0.5rem;">
+                        <span style="font-weight: 600; color: var(--gray-900);">Grand Total</span>
+                        <span id="add-purchase-total-display" style="font-weight: 700; color: var(--blue-600); font-size: 1.125rem;">Rp 0</span>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="modal-footer">
-            <button class="btn-toolbar secondary" onclick="closeModal('modal-add-purchase')">Batal</button>
-            <button class="btn-toolbar primary" onclick="savePurchase(false)"><i data-lucide="save"></i> Simpan PO</button>
+        <div class="modal-footer" style="justify-content: space-between;">
+            <div></div>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="btn-toolbar secondary" onclick="closeModal('modal-add-purchase')">Batal</button>
+                <button class="btn-toolbar primary" onclick="savePurchase(false)"><i data-lucide="save"></i> Simpan PO</button>
+            </div>
         </div>
     </div>
 </div>
 
 <!-- Edit Purchase Modal -->
 <div class="modal-overlay" id="modal-edit-purchase">
-    <div class="modal" style="max-width: 640px;">
+    <div class="modal" style="max-width: 800px;">
         <div class="modal-header">
             <h3>Edit Purchase Order</h3>
             <button class="modal-close" onclick="closeModal('modal-edit-purchase')"><i data-lucide="x"></i></button>
         </div>
         <div class="modal-body">
             <input type="hidden" id="edit-purchase-id">
+            <!-- Header Info -->
             <div class="form-row">
+                <div class="form-group">
+                    <label>No. PO</label>
+                    <input type="text" id="edit-purchase-number-display" class="form-input" disabled>
+                </div>
+                <div class="form-group">
+                    <label>Tanggal</label>
+                    <input type="date" id="edit-purchase-date" class="form-input">
+                </div>
                 <div class="form-group">
                     <label>Vendor</label>
                     <select id="edit-purchase-vendor" class="form-input">
@@ -1537,30 +1588,27 @@
                         <!-- Populated by JS -->
                     </select>
                 </div>
-                <div class="form-group">
-                    <label>Tanggal</label>
-                    <input type="date" id="edit-purchase-date" class="form-input">
-                </div>
             </div>
-            
+
+            <!-- Products List -->
             <hr style="border: 0; border-top: 1px dashed var(--gray-200); margin: 1rem 0;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                 <label style="margin-bottom: 0; font-weight: 600;">Daftar Item</label>
                 <div style="display: flex; gap: 0.5rem;">
-                    <select id="edit-purchase-product-select" class="form-input" style="width: 200px;">
+                    <select id="edit-purchase-product-select" class="form-input" style="width: 220px;">
                         <!-- Filled by JS -->
                     </select>
                     <button type="button" class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="addEditPurchaseItem()"><i data-lucide="plus"></i> Tambah Item</button>
                 </div>
             </div>
-            
+
             <div style="background: white; border: 1px solid var(--gray-200); border-radius: 0.5rem; overflow: hidden; margin-bottom: 1rem;">
                 <table style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
                     <thead style="background: var(--gray-50); border-bottom: 1px solid var(--gray-200);">
                         <tr>
                             <th style="padding: 0.75rem; text-align: left; color: var(--gray-600); font-weight: 600;">Produk</th>
                             <th style="padding: 0.75rem; text-align: center; color: var(--gray-600); font-weight: 600; width: 100px;">Qty</th>
-                            <th style="padding: 0.75rem; text-align: right; color: var(--gray-600); font-weight: 600; width: 150px;">Harga</th>
+                            <th style="padding: 0.75rem; text-align: right; color: var(--gray-600); font-weight: 600; width: 150px;">Harga Beli</th>
                             <th style="padding: 0.75rem; text-align: right; color: var(--gray-600); font-weight: 600; width: 150px;">Subtotal</th>
                             <th style="padding: 0.75rem; text-align: center; width: 50px;"></th>
                         </tr>
@@ -1571,29 +1619,56 @@
                 </table>
             </div>
 
-            <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">
-                <div style="font-size: 1.125rem; font-weight: 700;">
-                    Total Pembelian: <span id="edit-purchase-total" style="color: var(--blue-600);">Rp 0</span>
-                </div>
-            </div>
-
             <hr style="border: 0; border-top: 1px dashed var(--gray-200); margin: 1rem 0;">
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Pembayaran</label>
-                    <select id="edit-purchase-payment-type" class="form-input">
-                        <!-- Filled by JS -->
-                    </select>
+
+            <!-- Summary & Payment -->
+            <div class="form-row" style="align-items: flex-end;">
+                <div class="form-group" style="flex: 1;">
+                    <div class="form-group">
+                        <label>Status PO</label>
+                        <select id="edit-purchase-status" class="form-input">
+                            <option value="Dalam Proses">Dalam Proses</option>
+                            <option value="Selesai">Selesai</option>
+                            <option value="Batal">Batal</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Tipe Pembayaran</label>
+                        <select id="edit-purchase-payment-type" class="form-input" onchange="onPurchasePaymentTypeChange('edit')">
+                            <!-- Filled by JS -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Jumlah Bayar (Rp)</label>
+                        <input type="number" id="edit-purchase-paid" class="form-input">
+                    </div>
+                    <div class="form-group" id="edit-purchase-duedate-group" style="display: none;">
+                        <label>Tanggal Jatuh Tempo</label>
+                        <input type="date" id="edit-purchase-due-date" class="form-input">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Jumlah Bayar (Rp)</label>
-                    <input type="number" id="edit-purchase-paid" class="form-input">
+                <div style="flex: 1; padding: 1rem; background: var(--gray-50); border-radius: 0.5rem; border: 1px solid var(--gray-200);">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                        <span style="color: var(--gray-600); font-size: 0.875rem;">Total Item</span>
+                        <span id="edit-purchase-subtotal">Rp 0</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--gray-200); padding-top: 0.5rem; margin-top: 0.5rem;">
+                        <span style="font-weight: 600; color: var(--gray-900);">Grand Total</span>
+                        <span id="edit-purchase-total" style="font-weight: 700; color: var(--blue-600); font-size: 1.125rem;">Rp 0</span>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="modal-footer">
-            <button class="btn-toolbar secondary" onclick="closeModal('modal-edit-purchase')">Batal</button>
-            <button class="btn-toolbar primary" onclick="savePurchase(true)"><i data-lucide="save"></i> Simpan Perubahan</button>
+        <div class="modal-footer" style="justify-content: space-between;">
+            <div>
+                <button class="btn-toolbar primary" style="background: var(--rose-600); border-color: var(--rose-600); color: white;" onclick="cancelPurchaseFromEdit()">
+                    <i data-lucide="x-circle"></i> Batalkan PO
+                </button>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="btn-toolbar secondary" onclick="closeModal('modal-edit-purchase')">Discard</button>
+                <button class="btn-toolbar primary" onclick="savePurchase(true)"><i data-lucide="save"></i> Simpan Perubahan</button>
+            </div>
         </div>
     </div>
 </div>
