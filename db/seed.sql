@@ -61,31 +61,31 @@ ON CONFLICT (id) DO NOTHING;
 -- Sales Invoices (menggunakan payment_type_id)
 INSERT INTO sales_invoices (id, date, customer_id, subtotal, discount, tax, total, paid_amount, due_date, payment_type_id, payment_method, status) 
 VALUES 
-  ('INV/2026/06/0041', '2026-06-03', 'C001', 2850000, 0, 0, 2850000, 2850000, '2026-06-03', 'PT-1', 'Transfer', 'Lunas'),
-  ('INV/2026/06/0040', '2026-06-02', 'C003', 4750000, 0, 0, 4750000, 2000000, '2026-06-16', 'PT-2', 'Transfer', 'Sebagian'),
-  ('INV/2026/06/0039', '2026-06-02', 'C006', 8200000, 0, 0, 8200000, 0, '2026-06-16', 'PT-2', '-', 'Belum Bayar'),
-  ('INV/2026/06/0038', '2026-06-01', 'C002', 1250000, 0, 0, 1250000, 1250000, '2026-06-01', 'PT-1', 'Tunai', 'Lunas'),
-  ('INV/2026/06/0037', '2026-06-01', 'C004', 3400000, 0, 0, 3400000, 1500000, '2026-06-15', 'PT-3', 'Transfer', 'Sebagian')
+  ('INV/2026/06/0041', '2026-06-03', 'C0001', 2850000, 0, 0, 2850000, 2850000, '2026-06-03', 'PT-1', 'Transfer', 'Lunas'),
+  ('INV/2026/06/0040', '2026-06-02', 'C0003', 4750000, 0, 0, 4750000, 2000000, '2026-06-16', 'PT-2', 'Transfer', 'Sebagian'),
+  ('INV/2026/06/0039', '2026-06-02', 'C0006', 8200000, 0, 0, 8200000, 0, '2026-06-16', 'PT-2', '-', 'Belum Bayar'),
+  ('INV/2026/06/0038', '2026-06-01', 'C0002', 1250000, 0, 0, 1250000, 1250000, '2026-06-01', 'PT-1', 'Tunai', 'Lunas'),
+  ('INV/2026/06/0037', '2026-06-01', 'C0004', 3400000, 0, 0, 3400000, 1500000, '2026-06-15', 'PT-3', 'Transfer', 'Sebagian')
 ON CONFLICT (id) DO NOTHING;
 
 -- Purchase Orders (data contoh)
 INSERT INTO purchase_orders (id, date, vendor_id, total, paid_amount, due_date, payment_type_id, status) 
 VALUES 
-  ('PO/2026/06/018', '2026-06-02', 'V001', 15600000, 15600000, '2026-06-02', 'PT-1', 'Selesai'),
-  ('PO/2026/06/017', '2026-06-01', 'V002', 8400000, 4200000, '2026-06-15', 'PT-2', 'Dalam Proses'),
-  ('PO/2026/06/016', '2026-05-30', 'V004', 12500000, 4000000, '2026-06-30', 'PT-2', 'Dalam Proses'),
-  ('PO/2026/06/015', '2026-05-28', 'V003', 6200000, 6200000, '2026-05-28', 'PT-1', 'Selesai'),
-  ('PO/2026/06/014', '2026-05-25', 'V005', 3800000, 3800000, '2026-05-25', 'PT-1', 'Selesai')
+  ('PO/2026/06/0018', '2026-06-02', 'V0001', 15600000, 15600000, '2026-06-02', 'PT-1', 'Selesai'),
+  ('PO/2026/06/0017', '2026-06-01', 'V0002', 8400000, 4200000, '2026-06-15', 'PT-2', 'Dalam Proses'),
+  ('PO/2026/06/0016', '2026-05-30', 'V0004', 12500000, 4000000, '2026-06-30', 'PT-2', 'Dalam Proses'),
+  ('PO/2026/06/0015', '2026-05-28', 'V0003', 6200000, 6200000, '2026-05-28', 'PT-1', 'Selesai'),
+  ('PO/2026/06/0014', '2026-05-25', 'V0005', 3800000, 3800000, '2026-05-25', 'PT-1', 'Selesai')
 ON CONFLICT (id) DO NOTHING;
 
 -- Cash Transactions (data contoh dengan FK)
 INSERT INTO cash_transactions (id, date, type, category, description, amount, method, invoice_id, purchase_order_id, payment_type_id, user_id) 
 VALUES
-  ('CT001', '2026-06-03', 'IN', 'Penjualan', 'Pembayaran INV-2026-0041', 2850000, 'Transfer Bank', 'INV-2026-0041', NULL, 'PT-1', 1),
-  ('CT002', '2026-06-02', 'IN', 'Penjualan', 'DP dari Kafe Nusantara', 2000000, 'Transfer Bank', 'INV-2026-0040', NULL, 'PT-3', 1),
-  ('CT003', '2026-06-02', 'OUT', 'Pembelian Stok', 'Bayar PO-2026-018', 15600000, 'Transfer Bank', NULL, 'PO-2026-018', 'PT-1', 1),
-  ('CT004', '2026-06-01', 'IN', 'Penjualan', 'Pembayaran tunai Warung Sari Rasa', 1250000, 'Tunai', 'INV-2026-0038', NULL, 'PT-1', 1),
-  ('CT005', '2026-06-01', 'OUT', 'Operasional', 'Listrik & air gudang', 2500000, 'Transfer Bank', NULL, NULL, NULL, 1)
+  ('CT0001', '2026-06-03', 'IN', 'Penjualan', 'Pembayaran INV/2026/06/0041', 2850000, 'Transfer Bank', 'INV/2026/06/0041', NULL, 'PT-1', 1),
+  ('CT0002', '2026-06-02', 'IN', 'Penjualan', 'DP dari Kafe Nusantara', 2000000, 'Transfer Bank', 'INV/2026/06/0040', NULL, 'PT-3', 1),
+  ('CT0003', '2026-06-02', 'OUT', 'Pembelian Stok', 'Bayar PO/2026/06/0018', 15600000, 'Transfer Bank', NULL, 'PO/2026/06/0018', 'PT-1', 1),
+  ('CT0004', '2026-06-01', 'IN', 'Penjualan', 'Pembayaran tunai Warung Sari Rasa', 1250000, 'Tunai', 'INV/2026/06/0038', NULL, 'PT-1', 1),
+  ('CT0005', '2026-06-01', 'OUT', 'Operasional', 'Listrik & air gudang', 2500000, 'Transfer Bank', NULL, NULL, NULL, 1)
 ON CONFLICT (id) DO NOTHING;
 
 -- Seed default prefix settings
