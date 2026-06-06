@@ -813,10 +813,7 @@ app.get('/api/laporan/laba-rugi', authenticateToken, async (req, res) => {
     const labaKotor = penjualanBersih - hpp;
 
     // 3. BEBAN OPERASIONAL (Cash transactions OUT, category Operasional/Gaji/Sewa, no invoice/PO)
-    // To be generic, any OUT transaction not related to purchasing stock or related to PO
-    // The requirement says: category = 'Operasional' BUT we also seeded 'Gaji', 'Sewa', etc.
-    // So we will group by category for OUT transactions where invoice_id is null and po_id is null, 
-    // and category != 'Pembelian Stok'
+    // Exclude 'Pembelian Stok' and 'Penyesuaian Stok'
     const resBeban = await client.query(`
       SELECT category, SUM(amount) as total 
       FROM cash_transactions 
@@ -825,6 +822,7 @@ app.get('/api/laporan/laba-rugi', authenticateToken, async (req, res) => {
         AND invoice_id IS NULL 
         AND purchase_order_id IS NULL
         AND category != 'Pembelian Stok'
+        AND category != 'Penyesuaian Stok'
         AND EXTRACT(MONTH FROM date) = $1 
         AND EXTRACT(YEAR FROM date) = $2
       GROUP BY category
@@ -837,21 +835,41 @@ app.get('/api/laporan/laba-rugi', authenticateToken, async (req, res) => {
     const totalBebanOperasional = rincianBeban.reduce((sum, item) => sum + item.total, 0);
     const labaOperasional = labaKotor - totalBebanOperasional;
 
-    // 4. PENDAPATAN LAIN-LAIN
-    // From cash transactions IN, category != 'Penjualan'
+    // 4. PENYESUAIAN STOK
+    const resStok = await client.query(`
+      SELECT type, SUM(amount) as total
+      FROM cash_transactions
+      WHERE category = 'Penyesuaian Stok'
+        AND (status IS NULL OR status != 'cancelled')
+        AND EXTRACT(MONTH FROM date) = $1
+        AND EXTRACT(YEAR FROM date) = $2
+      GROUP BY type
+    `, [bulan, tahun]);
+    
+    let penyesuaianStokMasuk = 0;
+    let penyesuaianStokKeluar = 0;
+    resStok.rows.forEach(r => {
+      if (r.type === 'IN') penyesuaianStokMasuk = parseFloat(r.total);
+      if (r.type === 'OUT') penyesuaianStokKeluar = parseFloat(r.total);
+    });
+    const netPenyesuaianStok = penyesuaianStokMasuk - penyesuaianStokKeluar;
+
+    // 5. PENDAPATAN LAIN-LAIN
+    // From cash transactions IN, category != 'Penjualan' AND category != 'Penyesuaian Stok'
     const resLain = await client.query(`
       SELECT SUM(amount) as total 
       FROM cash_transactions 
       WHERE type = 'IN' 
         AND (status IS NULL OR status != 'cancelled')
         AND category != 'Penjualan'
+        AND category != 'Penyesuaian Stok'
         AND EXTRACT(MONTH FROM date) = $1 
         AND EXTRACT(YEAR FROM date) = $2
     `, [bulan, tahun]);
     const pendapatanLain = parseFloat(resLain.rows[0]?.total || 0);
 
     // LABA BERSIH
-    const labaBersih = labaOperasional + pendapatanLain;
+    const labaBersih = labaOperasional + netPenyesuaianStok + pendapatanLain;
 
     res.json({
       success: true,
@@ -868,6 +886,11 @@ app.get('/api/laporan/laba-rugi', authenticateToken, async (req, res) => {
           total: totalBebanOperasional
         },
         labaOperasional: labaOperasional,
+        penyesuaian_stok: {
+          masuk: penyesuaianStokMasuk,
+          keluar: penyesuaianStokKeluar,
+          net: netPenyesuaianStok
+        },
         pendapatanLain: pendapatanLain,
         labaBersih: labaBersih
       }

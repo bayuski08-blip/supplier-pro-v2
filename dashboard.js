@@ -892,15 +892,17 @@ async function renderProfitLoss() {
         if (!dataRes.success) throw new Error(dataRes.error || 'Gagal memuat data');
 
         const d = dataRes.data;
-        const rincianBebanHtml = d.operasional.rincian.length > 0 
-            ? d.operasional.rincian.map(r => `<div class="report-row sub-row" style="display:flex; justify-content:space-between; padding-left:1.5rem; color:var(--gray-500); padding-top:0.5rem; padding-bottom:0.5rem; border-bottom:1px dashed var(--gray-200);"><span>${r.category}</span><span>${rp(r.total)}</span></div>`).join('')
-            : `<div class="report-row sub-row" style="display:flex; justify-content:space-between; padding-left:1.5rem; color:var(--gray-500); padding-top:0.5rem; padding-bottom:0.5rem; border-bottom:1px dashed var(--gray-200);"><span>Tidak ada beban tercatat</span><span>Rp 0</span></div>`;
+        const fmtAmt = (amt, isSubtotal = false) => {
+            if (amt < 0) return `<span style="color:var(--rose-600);">- ${rp(Math.abs(amt))}</span>`;
+            if (amt > 0 && isSubtotal) return `<span style="color:var(--emerald-600);">${rp(amt)}</span>`;
+            return `<span>${rp(amt)}</span>`;
+        };
 
         const rowStyle = "display:flex; justify-content:space-between; padding:0.5rem 0; border-bottom:1px dashed var(--gray-200);";
         const titleStyle = "font-weight:600; color:var(--indigo-600); margin-bottom:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-size:1.1rem; margin-top:1.5rem;";
         const highlightStyle = "display:flex; justify-content:space-between; padding:1rem; border-radius:6px; margin-top:0.5rem; margin-bottom:1.5rem; font-weight:700; font-size:1.1rem; background:var(--gray-50);";
         
-        const grandTotalStyle = `margin-top:2rem; padding:1.5rem; color:white; border-radius:8px; display:flex; justify-content:space-between; align-items:center; font-size:1.25rem; font-weight:700; background: ${d.labaBersih >= 0 ? 'var(--emerald-600)' : 'var(--rose-600)'};`;
+        const grandTotalStyle = `margin-top:2rem; padding:1.5rem; color: ${d.labaBersih >= 0 ? 'var(--emerald-600)' : 'var(--rose-600)'}; border-radius:8px; display:flex; justify-content:space-between; align-items:center; font-size:1.25rem; font-weight:700; background: ${d.labaBersih >= 0 ? 'var(--emerald-50)' : 'var(--rose-50)'}; border-top: 2px solid ${d.labaBersih >= 0 ? 'var(--emerald-200)' : 'var(--rose-200)'};`;
 
         const html = `
             <!-- 1. PENDAPATAN -->
@@ -908,15 +910,15 @@ async function renderProfitLoss() {
                 <div style="${titleStyle}">Pendapatan</div>
                 <div style="${rowStyle}">
                     <span>Penjualan Kotor</span>
-                    <span>${rp(d.pendapatan.kotor)}</span>
+                    ${fmtAmt(d.pendapatan.kotor)}
                 </div>
                 <div style="${rowStyle} color:var(--gray-500); padding-left:1.5rem;">
                     <span>Dikurangi: Retur & Diskon</span>
-                    <span>- ${rp(d.pendapatan.diskon)}</span>
+                    ${fmtAmt(-d.pendapatan.diskon)}
                 </div>
                 <div style="${rowStyle} font-weight:600; border-bottom:none; padding-top:1rem;">
                     <span>Penjualan Bersih</span>
-                    <span>${rp(d.pendapatan.bersih)}</span>
+                    ${fmtAmt(d.pendapatan.bersih, true)}
                 </div>
             </div>
 
@@ -925,45 +927,70 @@ async function renderProfitLoss() {
                 <div style="${titleStyle}">Harga Pokok Penjualan (HPP)</div>
                 <div style="${rowStyle}">
                     <span>Total Pembelian / HPP</span>
-                    <span>${rp(d.hpp)}</span>
+                    ${fmtAmt(-d.hpp)}
                 </div>
             </div>
 
             <!-- LABA KOTOR -->
-            <div style="${highlightStyle} color: ${d.labaKotor >= 0 ? 'var(--emerald-600)' : 'var(--rose-600)'};">
+            <div style="${highlightStyle}">
                 <span>Laba Kotor</span>
-                <span>${rp(d.labaKotor)}</span>
+                ${fmtAmt(d.labaKotor, true)}
             </div>
 
             <!-- 3. BEBAN OPERASIONAL -->
             <div>
                 <div style="${titleStyle}">Beban Operasional</div>
-                ${rincianBebanHtml}
+                ${d.operasional.rincian.length > 0 ? d.operasional.rincian.map(r => `
+                    <div style="${rowStyle} color:var(--gray-500); padding-left:1.5rem;">
+                        <span>${r.category}</span>
+                        ${fmtAmt(-r.total)}
+                    </div>
+                `).join('') : `<div style="${rowStyle} color:var(--gray-500); padding-left:1.5rem;"><span>Tidak ada beban tercatat</span><span>Rp 0</span></div>`}
                 <div style="${rowStyle} font-weight:600; border-bottom:none; padding-top:1rem;">
                     <span>Total Beban Operasional</span>
-                    <span>${rp(d.operasional.total)}</span>
+                    ${fmtAmt(-d.operasional.total)}
                 </div>
             </div>
 
             <!-- LABA OPERASIONAL -->
-            <div style="${highlightStyle} color: ${d.labaOperasional >= 0 ? 'var(--emerald-600)' : 'var(--rose-600)'};">
+            <div style="${highlightStyle}">
                 <span>Laba Operasional</span>
-                <span>${rp(d.labaOperasional)}</span>
+                ${fmtAmt(d.labaOperasional, true)}
             </div>
 
-            <!-- 4. PENDAPATAN LAIN-LAIN -->
+            <!-- 4. PENYESUAIAN STOK -->
+            <div>
+                <div style="${titleStyle}">Penyesuaian Stok</div>
+                <div style="${rowStyle} color:var(--gray-500); padding-left:1.5rem;">
+                    <span>Penyesuaian Stok Masuk</span>
+                    ${fmtAmt(d.penyesuaian_stok.masuk)}
+                </div>
+                <div style="${rowStyle} color:var(--gray-500); padding-left:1.5rem;">
+                    <span>Penyesuaian Stok Keluar</span>
+                    ${fmtAmt(-d.penyesuaian_stok.keluar)}
+                </div>
+                <div style="${rowStyle} font-weight:600; border-bottom:none; padding-top:1rem;">
+                    <span>Net Penyesuaian Stok</span>
+                    ${fmtAmt(d.penyesuaian_stok.net, true)}
+                </div>
+            </div>
+
+            <!-- 5. PENDAPATAN LAIN-LAIN -->
             <div>
                 <div style="${titleStyle}">Pendapatan Lain-lain</div>
                 <div style="${rowStyle}">
                     <span>Pendapatan di luar usaha</span>
-                    <span>${rp(d.pendapatanLain)}</span>
+                    ${fmtAmt(d.pendapatanLain, true)}
                 </div>
             </div>
+
+            <!-- THIN DIVIDER -->
+            <hr style="margin-top: 2rem; border: 0; border-top: 1px solid var(--gray-200);">
 
             <!-- LABA BERSIH -->
             <div style="${grandTotalStyle}">
                 <span>${d.labaBersih >= 0 ? 'LABA BERSIH' : 'RUGI BERSIH'}</span>
-                <span>${rp(d.labaBersih)}</span>
+                ${fmtAmt(d.labaBersih, true)}
             </div>
         `;
         
