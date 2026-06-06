@@ -153,25 +153,67 @@ app.delete('/api/master/:type/:id', authenticateToken, async (req, res) => {
 // --- Dashboard & Summary Routes ---
 app.get('/api/dashboard/summary', authenticateToken, async (req, res) => {
   try {
-    const revenueResult = await pool.query('SELECT SUM(total) as revenue FROM sales_invoices WHERE status != $1', ['Batal']);
-    const totalInvoices = revenueResult.rows[0].revenue || 0;
-    
-    const receivablesResult = await pool.query('SELECT SUM(total - paid_amount) as receivables FROM sales_invoices WHERE status != $1 AND status != $2', ['Lunas', 'Batal']);
-    const unpaidInvoices = receivablesResult.rows[0].receivables || 0;
-    
-    const lowStockProductsResult = await pool.query('SELECT * FROM products WHERE stock <= min_stock');
-    const lowStockProducts = lowStockProductsResult.rows;
+    // Revenue (omzet) - semua invoice yang tidak batal
+    const revenueResult = await pool.query("SELECT SUM(total) as revenue FROM sales_invoices WHERE status != 'Batal'");
+    const revenue = parseFloat(revenueResult.rows[0].revenue || 0);
+
+    // Piutang - invoice yang belum lunas
+    const receivablesResult = await pool.query("SELECT SUM(total - paid_amount) as receivables FROM sales_invoices WHERE status != 'Lunas' AND status != 'Batal'");
+    const receivables = parseFloat(receivablesResult.rows[0].receivables || 0);
+
+    // Hutang ke vendor - PO yang belum selesai
+    const payablesResult = await pool.query("SELECT SUM(total - paid_amount) as payables FROM purchase_orders WHERE status != 'Selesai' AND status != 'Batal'");
+    const payables = parseFloat(payablesResult.rows[0].payables || 0);
+
+    // Stok menipis
+    const lowStockResult = await pool.query('SELECT id, name, stock, min_stock FROM products WHERE stock <= min_stock ORDER BY stock ASC');
+    const lowStockProducts = lowStockResult.rows;
+
+    // Laba Kotor (Revenue - HPP)
+    const hppResult = await pool.query(`
+      SELECT COALESCE(SUM(ii.quantity * p.cost_price), 0) as hpp
+      FROM invoice_items ii
+      JOIN products p ON ii.product_id = p.id
+      JOIN sales_invoices si ON ii.invoice_id = si.id
+      WHERE si.status != 'Batal'
+    `);
+    const hpp = parseFloat(hppResult.rows[0].hpp || 0);
+    const grossProfit = revenue - hpp;
+
+    // Order hari ini
+    const today = new Date().toISOString().split('T')[0];
+    const ordersTodayResult = await pool.query("SELECT COUNT(*) as count FROM sales_invoices WHERE date::date = $1 AND status != 'Batal'", [today]);
+    const ordersToday = parseInt(ordersTodayResult.rows[0].count || 0);
+
+    // Jumlah pelanggan aktif
+    const customersResult = await pool.query('SELECT COUNT(*) as count FROM customers');
+    const customerCount = parseInt(customersResult.rows[0].count || 0);
+
+    // Jumlah produk
+    const productsResult = await pool.query('SELECT COUNT(*) as count FROM products');
+    const productCount = parseInt(productsResult.rows[0].count || 0);
+
+    // Jumlah invoice belum lunas (untuk badge piutang)
+    const unpaidCountResult = await pool.query("SELECT COUNT(*) as count FROM sales_invoices WHERE status != 'Lunas' AND status != 'Batal'");
+    const unpaidCount = parseInt(unpaidCountResult.rows[0].count || 0);
 
     res.json({
-      revenue: parseFloat(totalInvoices),
-      receivables: parseFloat(unpaidInvoices),
+      revenue,
+      receivables,
+      payables,
       lowStockCount: lowStockProducts.length,
-      lowStockProducts
+      lowStockProducts,
+      grossProfit,
+      ordersToday,
+      customerCount,
+      productCount,
+      unpaidCount
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // --- Products Routes ---
 app.get('/api/products', authenticateToken, async (req, res) => {

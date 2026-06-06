@@ -192,6 +192,19 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 });
 
 // ---------- Dashboard Rendering ----------
+let DASHBOARD_SUMMARY = null;
+
+async function fetchDashboardSummary() {
+    try {
+        const res = await fetch('/api/dashboard/summary', { headers: getAuthHeaders() });
+        if (res.ok) {
+            DASHBOARD_SUMMARY = await res.json();
+        }
+    } catch (err) {
+        console.error('Failed to fetch dashboard summary', err);
+    }
+}
+
 function renderDashboard() {
     renderSummaryCards();
     renderSalesChart();
@@ -201,24 +214,28 @@ function renderDashboard() {
 }
 
 function renderSummaryCards() {
-    const totalOmzet = INVOICES.reduce((s, i) => s + i.total, 0);
-    const totalPiutang = INVOICES.filter(i => i.status !== 'lunas').reduce((s, i) => s + (i.total - i.paid), 0);
-    const totalHutang = VENDORS.reduce((s, v) => s + v.debt, 0);
-    const lowStockCount = PRODUCTS.filter(p => p.stock <= p.minStock).length;
-    const labaKotor = INVOICES.reduce((s, i) => s + i.total, 0) * 0.28; // ~28% margin
-    const ordersToday = INVOICES.filter(i => i.date === '2026-06-03').length;
-    const activeCustomers = CUSTOMERS.length;
-    const totalProducts = PRODUCTS.length;
+    // Prioritize fetched API summary, fallback to computed values from loaded arrays
+    const totalOmzet = DASHBOARD_SUMMARY?.revenue ?? INVOICES.filter(i => i.status.toLowerCase() !== 'batal').reduce((s, i) => s + i.total, 0);
+    const totalPiutang = DASHBOARD_SUMMARY?.receivables ?? INVOICES.filter(i => i.status.toLowerCase() !== 'lunas' && i.status.toLowerCase() !== 'batal').reduce((s, i) => s + (i.total - i.paid), 0);
+    const totalHutang = DASHBOARD_SUMMARY?.payables ?? PURCHASES.filter(p => p.status.toLowerCase() !== 'selesai' && p.status.toLowerCase() !== 'batal').reduce((s, p) => s + (p.total - p.paid), 0);
+    const lowStockCount = DASHBOARD_SUMMARY?.lowStockCount ?? PRODUCTS.filter(p => p.stock <= p.minStock).length;
+    const labaKotor = DASHBOARD_SUMMARY?.grossProfit ?? (totalOmzet * 0.28);
+    const ordersToday = DASHBOARD_SUMMARY?.ordersToday ?? (() => {
+        const today = new Date().toISOString().split('T')[0];
+        return INVOICES.filter(i => (i.date || '').startsWith(today) && i.status.toLowerCase() !== 'batal').length;
+    })();
+    const activeCustomers = DASHBOARD_SUMMARY?.customerCount ?? CUSTOMERS.length;
+    const totalProducts = DASHBOARD_SUMMARY?.productCount ?? PRODUCTS.length;
 
     const cards = [
-        { label: 'Omzet Bulan Ini', value: rpShort(totalOmzet), trend: '+12%', trendDir: 'up', icon: 'trending-up', color: 'blue' },
-        { label: 'Total Piutang', value: rpShort(totalPiutang), trend: '5 invoice', trendDir: 'down', icon: 'hand-coins', color: 'amber' },
-        { label: 'Total Hutang', value: rpShort(totalHutang), trend: '3 vendor', trendDir: 'down', icon: 'landmark', color: 'rose' },
-        { label: 'Stok Menipis', value: lowStockCount + ' produk', trend: 'Perlu restock', trendDir: 'down', icon: 'alert-triangle', color: 'orange' },
-        { label: 'Laba Kotor', value: rpShort(labaKotor), trend: '+8%', trendDir: 'up', icon: 'wallet', color: 'emerald' },
-        { label: 'Pesanan Hari Ini', value: ordersToday, trend: 'hari ini', trendDir: 'up', icon: 'shopping-cart', color: 'indigo' },
-        { label: 'Pelanggan Aktif', value: activeCustomers, trend: '+2 baru', trendDir: 'up', icon: 'users', color: 'violet' },
-        { label: 'Produk Terdaftar', value: totalProducts, trend: 'Katalog', trendDir: 'up', icon: 'package', color: 'cyan' },
+        { label: 'Omzet Bulan Ini', value: rpShort(totalOmzet), trend: 'Total penjualan', trendDir: 'up', icon: 'trending-up', color: 'blue' },
+        { label: 'Total Piutang', value: rpShort(totalPiutang), trend: totalPiutang > 0 ? 'Belum terbayar' : 'Semua lunas', trendDir: totalPiutang > 0 ? 'down' : 'up', icon: 'hand-coins', color: 'amber' },
+        { label: 'Total Hutang', value: rpShort(totalHutang), trend: totalHutang > 0 ? 'Ke vendor' : 'Semua lunas', trendDir: totalHutang > 0 ? 'down' : 'up', icon: 'landmark', color: 'rose' },
+        { label: 'Stok Menipis', value: lowStockCount + ' produk', trend: lowStockCount > 0 ? 'Perlu restock' : 'Stok aman', trendDir: lowStockCount > 0 ? 'down' : 'up', icon: 'alert-triangle', color: 'orange' },
+        { label: 'Laba Kotor', value: rpShort(labaKotor), trend: labaKotor >= 0 ? 'Revenue - HPP' : 'Rugi', trendDir: labaKotor >= 0 ? 'up' : 'down', icon: 'wallet', color: 'emerald' },
+        { label: 'Order Hari Ini', value: ordersToday + ' transaksi', trend: 'Hari ini', trendDir: 'up', icon: 'shopping-cart', color: 'indigo' },
+        { label: 'Pelanggan Aktif', value: activeCustomers + ' pelanggan', trend: 'Terdaftar', trendDir: 'up', icon: 'users', color: 'violet' },
+        { label: 'Produk Terdaftar', value: totalProducts + ' produk', trend: 'Katalog', trendDir: 'up', icon: 'package', color: 'cyan' },
     ];
 
     const grid = document.getElementById('summary-grid');
@@ -233,6 +250,7 @@ function renderSummaryCards() {
         </div>
     `).join('');
 }
+
 
 function renderSalesChart() {
     const maxVal = Math.max(...SALES_CHART_DATA.map(d => d.value));
@@ -1304,21 +1322,27 @@ function capitalize(str) {
 
 // ---------- Initialize Everything ----------
 async function init() {
+    // Render empty placeholders while loading
     renderDashboard();
     renderProducts();
     renderCustomers();
     renderVendors();
     
-    // We will fetch products and customers dynamically instead of rendering mock data first
+    // Populate dropdowns and fetch all data from DB
     await populateMasterDropdowns();
-    await fetchProducts();
-    await fetchCustomers();
-    await fetchVendors();
-    await fetchPurchases();
-    await fetchInvoices();
-    await fetchCashTransactions();
-    await fetchUsers();
+    await Promise.all([
+        fetchDashboardSummary(),
+        fetchProducts(),
+        fetchCustomers(),
+        fetchVendors(),
+        fetchPurchases(),
+        fetchInvoices(),
+        fetchCashTransactions(),
+        fetchUsers()
+    ]);
 
+    // Re-render dashboard with real DB data
+    renderDashboard();
     renderInvoices();
     renderPiutang();
     renderHutang();
@@ -1338,6 +1362,7 @@ async function init() {
     // Initialize Lucide icons
     if (typeof lucide !== 'undefined') lucide.createIcons();
 }
+
 
 // ---------- API Integrations ----------
 const getAuthHeaders = () => ({
