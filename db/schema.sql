@@ -141,7 +141,8 @@ CREATE TABLE IF NOT EXISTS cash_transactions (
   invoice_id VARCHAR(255) REFERENCES sales_invoices(id) ON DELETE SET NULL,
   purchase_order_id VARCHAR(255) REFERENCES purchase_orders(id) ON DELETE SET NULL,
   payment_type_id VARCHAR(255) REFERENCES payment_types(id) ON DELETE SET NULL,
-  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  status VARCHAR(20) DEFAULT 'active'
 );
 
 CREATE TABLE IF NOT EXISTS settings (

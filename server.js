@@ -634,6 +634,10 @@ app.post('/api/finance/receivables/:id/pay', authenticateToken, async (req, res)
 });
 
 // --- Cash Flow Route ---
+// Auto-migrate: add 'status' column if not exists
+pool.query(`ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active'`)
+  .catch(err => console.error('Error adding status column to cash_transactions:', err));
+
 app.get('/api/finance/cash-flow', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM cash_transactions ORDER BY date DESC, id DESC');
@@ -646,10 +650,105 @@ app.get('/api/finance/cash-flow', authenticateToken, async (req, res) => {
       amount: parseFloat(r.amount),
       method: r.method || '-',
       invoiceId: r.invoice_id || '',
-      purchaseOrderId: r.purchase_order_id || ''
+      purchaseOrderId: r.purchase_order_id || '',
+      status: r.status || 'active',
+      isManual: !r.invoice_id && !r.purchase_order_id
     })));
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST - Catat transaksi kas manual
+app.post('/api/finance/cash-flow', authenticateToken, async (req, res) => {
+  const { type, category, description, amount, method, date } = req.body;
+  if (!type || !amount || parseFloat(amount) <= 0) {
+    return res.status(400).json({ error: 'Tipe dan jumlah wajib diisi' });
+  }
+  try {
+    const ctId = 'CT-' + Date.now() + Math.floor(Math.random() * 1000);
+    const ctDate = date || new Date().toISOString().split('T')[0];
+    await pool.query(
+      `INSERT INTO cash_transactions (id, date, type, category, description, amount, method, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')`,
+      [ctId, ctDate, type, category || 'Lainnya', description || '-', parseFloat(amount), method || 'Transfer Bank']
+    );
+    res.json({ success: true, id: ctId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT - Edit transaksi kas manual (hanya yang tidak punya invoice_id / purchase_order_id)
+app.put('/api/finance/cash-flow/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { type, category, description, amount, method, date } = req.body;
+  try {
+    const existing = await pool.query('SELECT * FROM cash_transactions WHERE id = $1', [id]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
+    const tx = existing.rows[0];
+    if (tx.invoice_id || tx.purchase_order_id) {
+      return res.status(403).json({ error: 'Transaksi otomatis tidak dapat diedit' });
+    }
+    await pool.query(
+      `UPDATE cash_transactions SET type=$1, category=$2, description=$3, amount=$4, method=$5, date=$6 WHERE id=$7`,
+      [type || tx.type, category || tx.category, description || tx.description,
+       parseFloat(amount) || tx.amount, method || tx.method, date || tx.date, id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH - Batalkan transaksi kas (soft delete + reversal untuk auto transactions)
+app.patch('/api/finance/cash-flow/:id/cancel', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const existing = await client.query('SELECT * FROM cash_transactions WHERE id = $1', [id]);
+    if (existing.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
+    }
+    const tx = existing.rows[0];
+    if ((tx.status || 'active') === 'cancelled') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Transaksi sudah dibatalkan' });
+    }
+
+    // Soft delete
+    await client.query(`UPDATE cash_transactions SET status='cancelled' WHERE id=$1`, [id]);
+
+    // Reversal untuk transaksi otomatis
+    if (tx.invoice_id) {
+      // Reversal invoice paid_amount
+      const invRes = await client.query('SELECT * FROM sales_invoices WHERE id=$1', [tx.invoice_id]);
+      if (invRes.rows.length > 0) {
+        const inv = invRes.rows[0];
+        const newPaid = Math.max(0, parseFloat(inv.paid_amount) - parseFloat(tx.amount));
+        const newStatus = newPaid >= parseFloat(inv.total) ? 'Lunas' : newPaid > 0 ? 'Sebagian' : 'Belum Bayar';
+        await client.query('UPDATE sales_invoices SET paid_amount=$1, status=$2 WHERE id=$3', [newPaid, newStatus, tx.invoice_id]);
+      }
+    } else if (tx.purchase_order_id) {
+      // Reversal PO paid_amount
+      const poRes = await client.query('SELECT * FROM purchase_orders WHERE id=$1', [tx.purchase_order_id]);
+      if (poRes.rows.length > 0) {
+        const po = poRes.rows[0];
+        const newPaid = Math.max(0, parseFloat(po.paid_amount) - parseFloat(tx.amount));
+        const newStatus = newPaid >= parseFloat(po.total) ? 'Selesai' : 'Dalam Proses';
+        await client.query('UPDATE purchase_orders SET paid_amount=$1, status=$2 WHERE id=$3', [newPaid, newStatus, tx.purchase_order_id]);
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 

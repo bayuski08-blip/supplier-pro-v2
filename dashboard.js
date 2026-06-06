@@ -808,8 +808,10 @@ function renderHutang(filter = '') {
 
 // ---------- Cash Flow Page ----------
 function renderCashFlow(filter = '') {
-    const totalIn = CASH_TRANSACTIONS.filter(t => t.type === 'IN').reduce((s, t) => s + t.amount, 0);
-    const totalOut = CASH_TRANSACTIONS.filter(t => t.type === 'OUT').reduce((s, t) => s + t.amount, 0);
+    // Untuk summary, hanya hitung transaksi aktif
+    const activeTx = CASH_TRANSACTIONS.filter(t => (t.status || 'active') === 'active');
+    const totalIn = activeTx.filter(t => t.type === 'IN').reduce((s, t) => s + t.amount, 0);
+    const totalOut = activeTx.filter(t => t.type === 'OUT').reduce((s, t) => s + t.amount, 0);
     const net = totalIn - totalOut;
 
     document.getElementById('cashflow-summary').innerHTML = `
@@ -829,20 +831,41 @@ function renderCashFlow(filter = '') {
 
     const tbody = document.getElementById('cashflow-body');
     let filtered = CASH_TRANSACTIONS;
+
+    // Filter tipe (in/out)
     if (filter === 'in') filtered = filtered.filter(t => t.type === 'IN');
     if (filter === 'out') filtered = filtered.filter(t => t.type === 'OUT');
 
-    tbody.innerHTML = filtered.map(t => `
-        <tr>
+    // Filter status
+    const statusFilter = document.getElementById('cashflow-status-filter') ? document.getElementById('cashflow-status-filter').value : 'all';
+    if (statusFilter === 'active') filtered = filtered.filter(t => (t.status || 'active') === 'active');
+    if (statusFilter === 'cancelled') filtered = filtered.filter(t => t.status === 'cancelled');
+
+    tbody.innerHTML = filtered.map(t => {
+        const isCancelled = t.status === 'cancelled';
+        const isManual = t.isManual;
+        const rowStyle = isCancelled ? 'opacity:0.55; text-decoration: line-through;' : '';
+
+        const actionBtns = isCancelled ? `<span class="badge-status batal" style="font-size:0.7rem;">Dibatalkan</span>` : `
+            ${isManual ? `<button class="btn-toolbar secondary" style="padding:0.2rem 0.45rem; font-size:0.72rem; margin-right:0.2rem;" title="Edit" onclick="openEditCashModal('${t.id}')"><i data-lucide="edit-2" style="width:13px;height:13px;margin:0;"></i></button>` : ''}
+            <button class="btn-toolbar secondary" style="padding:0.2rem 0.45rem; font-size:0.72rem; color:var(--rose-500);" title="${isManual ? 'Hapus' : 'Void/Batal'}" onclick="cancelCashTransaction('${t.id}')"><i data-lucide="x-circle" style="width:13px;height:13px;margin:0;"></i></button>
+        `;
+
+        return `
+        <tr style="${rowStyle}">
             <td>${t.date}</td>
             <td style="font-weight:600;">${t.desc}</td>
             <td><span class="badge-status ${t.category === 'Penjualan' || t.category === 'Piutang' ? 'lunas' : 'tempo'}">${t.category}</span></td>
             <td><span class="badge-status ${t.type.toLowerCase()}">${t.type === 'IN' ? '↑ Masuk' : '↓ Keluar'}</span></td>
             <td style="font-weight:700; color: ${t.type === 'IN' ? 'var(--emerald-500)' : 'var(--rose-500)'};">${t.type === 'IN' ? '+' : '-'}${rp(t.amount)}</td>
             <td>${t.method}</td>
+            <td style="text-align:right; white-space:nowrap;">${actionBtns}</td>
         </tr>
-    `).join('');
+    `}).join('');
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
 }
+
 
 // ---------- Profit & Loss Page ----------
 function renderProfitLoss() {
@@ -2415,13 +2438,19 @@ async function fetchCashTransactions() {
 }
 
 async function saveCashTransaction() {
-    const payload = {
-        type: document.getElementById('add-cash-type').value,
-        category: document.getElementById('add-cash-category').value,
-        amount: document.getElementById('add-cash-amount').value,
-        notes: document.getElementById('add-cash-notes').value,
-        date: document.getElementById('add-cash-date').value
-    };
+    const type = document.getElementById('add-cash-type').value;
+    const category = document.getElementById('add-cash-category').value;
+    const description = document.getElementById('add-cash-desc').value;
+    const amount = document.getElementById('add-cash-amount').value;
+    const method = document.getElementById('add-cash-method').value;
+    const date = document.getElementById('add-cash-date').value;
+
+    if (!amount || parseFloat(amount) <= 0) {
+        showToast('Jumlah wajib diisi dan harus lebih dari 0!', 'warning');
+        return;
+    }
+
+    const payload = { type, category, description, amount: parseFloat(amount), method, date };
 
     try {
         const res = await fetch('/api/finance/cash-flow', {
@@ -2431,18 +2460,82 @@ async function saveCashTransaction() {
         });
         if (res.ok) {
             closeModal('modal-add-cash');
+            showToast('Transaksi kas berhasil disimpan!', 'success');
             fetchCashTransactions();
-            fetchInvoices(); // if it affects unpaid
-            fetchPurchases();
         } else {
             const err = await res.json();
-            alert('Error: ' + err.error);
+            showToast('Error: ' + err.error, 'error');
         }
     } catch (err) {
         console.error(err);
-        alert('Gagal menyimpan transaksi kas');
+        showToast('Gagal menyimpan transaksi kas', 'error');
     }
 }
+
+// Edit Cash Transaction - buka modal edit
+function openEditCashModal(id) {
+    const tx = CASH_TRANSACTIONS.find(t => t.id === id);
+    if (!tx) return;
+    document.getElementById('edit-cash-id').value = tx.id;
+    document.getElementById('edit-cash-type').value = tx.type;
+    document.getElementById('edit-cash-date').value = tx.date;
+    document.getElementById('edit-cash-desc').value = tx.desc || '';
+    document.getElementById('edit-cash-amount').value = tx.amount;
+    document.getElementById('edit-cash-method').value = tx.method;
+    document.getElementById('edit-cash-category').value = tx.category || 'Lainnya';
+    openModal('modal-edit-cash');
+}
+
+async function saveCashTransactionEdit() {
+    const id = document.getElementById('edit-cash-id').value;
+    const payload = {
+        type: document.getElementById('edit-cash-type').value,
+        category: document.getElementById('edit-cash-category').value,
+        description: document.getElementById('edit-cash-desc').value,
+        amount: parseFloat(document.getElementById('edit-cash-amount').value),
+        method: document.getElementById('edit-cash-method').value,
+        date: document.getElementById('edit-cash-date').value
+    };
+    try {
+        const res = await fetch(`/api/finance/cash-flow/${id}`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            closeModal('modal-edit-cash');
+            showToast('Transaksi berhasil diperbarui!', 'success');
+            fetchCashTransactions();
+        } else {
+            const err = await res.json();
+            showToast('Error: ' + err.error, 'error');
+        }
+    } catch (err) {
+        showToast('Gagal memperbarui transaksi', 'error');
+    }
+}
+
+async function cancelCashTransaction(id) {
+    if (!confirm('Yakin ingin membatalkan transaksi ini? Untuk transaksi otomatis, pembayaran terkait akan dikembalikan.')) return;
+    try {
+        const res = await fetch(`/api/finance/cash-flow/${id}/cancel`, {
+            method: 'PATCH',
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            showToast('Transaksi berhasil dibatalkan!', 'success');
+            fetchCashTransactions();
+            fetchInvoices();
+            fetchPurchases();
+        } else {
+            const err = await res.json();
+            showToast('Error: ' + err.error, 'error');
+        }
+    } catch (err) {
+        showToast('Gagal membatalkan transaksi', 'error');
+    }
+}
+
 
 // FIX: helper to open hutang payment modal with correct PO id pre-filled
 function openHutangPaymentModal(poId, sisa) {

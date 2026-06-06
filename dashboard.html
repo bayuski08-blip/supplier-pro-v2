@@ -665,6 +665,11 @@
                             <button class="tab-filter" data-filter="in">Kas Masuk</button>
                             <button class="tab-filter" data-filter="out">Kas Keluar</button>
                         </div>
+                        <select class="filter-select" id="cashflow-status-filter" onchange="renderCashFlow()">
+                            <option value="all">Semua Status</option>
+                            <option value="active">Aktif</option>
+                            <option value="cancelled">Dibatalkan</option>
+                        </select>
                     </div>
                     <div class="page-toolbar-right">
                         <button class="btn-toolbar primary" onclick="openModal('modal-add-cash')">
@@ -683,6 +688,7 @@
                                 <th>Tipe</th>
                                 <th>Jumlah</th>
                                 <th>Metode</th>
+                                <th style="text-align:right;">Aksi</th>
                             </tr>
                         </thead>
                         <tbody id="cashflow-body">
@@ -1858,6 +1864,65 @@
         <div class="modal-footer">
             <button class="btn-toolbar secondary" onclick="closeModal('modal-add-cash')">Batal</button>
             <button class="btn-toolbar primary" onclick="saveCashTransaction()"><i data-lucide="save"></i> Simpan</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Cash Transaction Modal -->
+<div class="modal-overlay" id="modal-edit-cash">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Edit Transaksi Kas</h3>
+            <button class="modal-close" onclick="closeModal('modal-edit-cash')"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="edit-cash-id">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Tipe</label>
+                    <select id="edit-cash-type" class="form-input">
+                        <option value="IN">Kas Masuk</option>
+                        <option value="OUT">Kas Keluar</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Tanggal</label>
+                    <input type="date" id="edit-cash-date" class="form-input">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Deskripsi</label>
+                <input type="text" id="edit-cash-desc" class="form-input" placeholder="Deskripsi transaksi">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Jumlah (Rp)</label>
+                    <input type="number" id="edit-cash-amount" class="form-input" placeholder="0">
+                </div>
+                <div class="form-group">
+                    <label>Metode</label>
+                    <select id="edit-cash-method" class="form-input">
+                        <option>Transfer Bank</option>
+                        <option>Tunai</option>
+                        <option>QRIS</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Kategori</label>
+                <select id="edit-cash-category" class="form-input">
+                    <option>Penjualan</option>
+                    <option>Pembelian Stok</option>
+                    <option>Operasional</option>
+                    <option>Gaji</option>
+                    <option>Sewa</option>
+                    <option>Lainnya</option>
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-toolbar secondary" onclick="closeModal('modal-edit-cash')">Batal</button>
+            <button class="btn-toolbar primary" onclick="saveCashTransactionEdit()"><i data-lucide="save"></i> Simpan Perubahan</button>
         </div>
     </div>
 </div>
