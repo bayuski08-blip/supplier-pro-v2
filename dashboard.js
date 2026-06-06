@@ -861,6 +861,117 @@ function renderCashFlow(filter = '') {
     if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
+// ---------- Profit & Loss Page ----------
+async function renderProfitLoss() {
+    const bulanSelect = document.getElementById('filter-bulan');
+    const tahunSelect = document.getElementById('filter-tahun');
+    
+    // Set default to current month/year if not set yet
+    if (!bulanSelect.value) {
+        const today = new Date();
+        bulanSelect.value = today.getMonth() + 1;
+        tahunSelect.value = today.getFullYear();
+    }
+
+    const bulan = bulanSelect.value;
+    const tahun = tahunSelect.value;
+    const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+    
+    const periodEl = document.getElementById('report-period');
+    if (periodEl) periodEl.innerText = `Periode: ${monthNames[bulan-1]} ${tahun}`;
+
+    const contentEl = document.getElementById('report-content');
+    if (contentEl) contentEl.innerHTML = '<div style="text-align:center; padding: 2rem;">Memuat...</div>';
+
+    try {
+        const res = await fetch(`/api/laporan/laba-rugi?bulan=${bulan}&tahun=${tahun}`, {
+            headers: getAuthHeaders()
+        });
+        const dataRes = await res.json();
+        
+        if (!dataRes.success) throw new Error(dataRes.error || 'Gagal memuat data');
+
+        const d = dataRes.data;
+        const rincianBebanHtml = d.operasional.rincian.length > 0 
+            ? d.operasional.rincian.map(r => `<div class="report-row sub-row" style="display:flex; justify-content:space-between; padding-left:1.5rem; color:var(--gray-500); padding-top:0.5rem; padding-bottom:0.5rem; border-bottom:1px dashed var(--gray-200);"><span>${r.category}</span><span>${rp(r.total)}</span></div>`).join('')
+            : `<div class="report-row sub-row" style="display:flex; justify-content:space-between; padding-left:1.5rem; color:var(--gray-500); padding-top:0.5rem; padding-bottom:0.5rem; border-bottom:1px dashed var(--gray-200);"><span>Tidak ada beban tercatat</span><span>Rp 0</span></div>`;
+
+        const rowStyle = "display:flex; justify-content:space-between; padding:0.5rem 0; border-bottom:1px dashed var(--gray-200);";
+        const titleStyle = "font-weight:600; color:var(--indigo-600); margin-bottom:0.75rem; text-transform:uppercase; letter-spacing:0.05em; font-size:1.1rem; margin-top:1.5rem;";
+        const highlightStyle = "display:flex; justify-content:space-between; padding:1rem; border-radius:6px; margin-top:0.5rem; margin-bottom:1.5rem; font-weight:700; font-size:1.1rem; background:var(--gray-50);";
+        
+        const grandTotalStyle = `margin-top:2rem; padding:1.5rem; color:white; border-radius:8px; display:flex; justify-content:space-between; align-items:center; font-size:1.25rem; font-weight:700; background: ${d.labaBersih >= 0 ? 'var(--emerald-600)' : 'var(--rose-600)'};`;
+
+        const html = `
+            <!-- 1. PENDAPATAN -->
+            <div>
+                <div style="${titleStyle}">Pendapatan</div>
+                <div style="${rowStyle}">
+                    <span>Penjualan Kotor</span>
+                    <span>${rp(d.pendapatan.kotor)}</span>
+                </div>
+                <div style="${rowStyle} color:var(--gray-500); padding-left:1.5rem;">
+                    <span>Dikurangi: Retur & Diskon</span>
+                    <span>- ${rp(d.pendapatan.diskon)}</span>
+                </div>
+                <div style="${rowStyle} font-weight:600; border-bottom:none; padding-top:1rem;">
+                    <span>Penjualan Bersih</span>
+                    <span>${rp(d.pendapatan.bersih)}</span>
+                </div>
+            </div>
+
+            <!-- 2. HPP -->
+            <div>
+                <div style="${titleStyle}">Harga Pokok Penjualan (HPP)</div>
+                <div style="${rowStyle}">
+                    <span>Total Pembelian / HPP</span>
+                    <span>${rp(d.hpp)}</span>
+                </div>
+            </div>
+
+            <!-- LABA KOTOR -->
+            <div style="${highlightStyle} color: ${d.labaKotor >= 0 ? 'var(--emerald-600)' : 'var(--rose-600)'};">
+                <span>Laba Kotor</span>
+                <span>${rp(d.labaKotor)}</span>
+            </div>
+
+            <!-- 3. BEBAN OPERASIONAL -->
+            <div>
+                <div style="${titleStyle}">Beban Operasional</div>
+                ${rincianBebanHtml}
+                <div style="${rowStyle} font-weight:600; border-bottom:none; padding-top:1rem;">
+                    <span>Total Beban Operasional</span>
+                    <span>${rp(d.operasional.total)}</span>
+                </div>
+            </div>
+
+            <!-- LABA OPERASIONAL -->
+            <div style="${highlightStyle} color: ${d.labaOperasional >= 0 ? 'var(--emerald-600)' : 'var(--rose-600)'};">
+                <span>Laba Operasional</span>
+                <span>${rp(d.labaOperasional)}</span>
+            </div>
+
+            <!-- 4. PENDAPATAN LAIN-LAIN -->
+            <div>
+                <div style="${titleStyle}">Pendapatan Lain-lain</div>
+                <div style="${rowStyle}">
+                    <span>Pendapatan di luar usaha</span>
+                    <span>${rp(d.pendapatanLain)}</span>
+                </div>
+            </div>
+
+            <!-- LABA BERSIH -->
+            <div style="${grandTotalStyle}">
+                <span>${d.labaBersih >= 0 ? 'LABA BERSIH' : 'RUGI BERSIH'}</span>
+                <span>${rp(d.labaBersih)}</span>
+            </div>
+        `;
+        
+        if (contentEl) contentEl.innerHTML = html;
+    } catch (err) {
+        if (contentEl) contentEl.innerHTML = `<div style="text-align:center; padding: 2rem; color: red;">${err.message}</div>`;
+    }
+}
 
 // ---------- Balance Sheet Page ----------
 function renderBalance() {

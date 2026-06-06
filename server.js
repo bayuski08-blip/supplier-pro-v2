@@ -791,8 +791,8 @@ app.get('/api/laporan/laba-rugi', authenticateToken, async (req, res) => {
     const resPendapatan = await client.query(`
       SELECT SUM(total) as kotor, SUM(discount) as diskon 
       FROM sales_invoices 
-      WHERE EXTRACT(MONTH FROM date) = $1 
-        AND EXTRACT(YEAR FROM date) = $2 
+      WHERE EXTRACT(MONTH FROM date::DATE) = $1 
+        AND EXTRACT(YEAR FROM date::DATE) = $2 
         AND status != 'Dibatalkan'
     `, [bulan, tahun]);
 
@@ -805,8 +805,8 @@ app.get('/api/laporan/laba-rugi', authenticateToken, async (req, res) => {
     const resHPP = await client.query(`
       SELECT SUM(total) as hpp 
       FROM purchase_orders 
-      WHERE EXTRACT(MONTH FROM date) = $1 
-        AND EXTRACT(YEAR FROM date) = $2 
+      WHERE EXTRACT(MONTH FROM date::DATE) = $1 
+        AND EXTRACT(YEAR FROM date::DATE) = $2 
         AND status = 'Selesai'
     `, [bulan, tahun]);
     const hpp = parseFloat(resHPP.rows[0]?.hpp || 0);
