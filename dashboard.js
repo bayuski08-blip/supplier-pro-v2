@@ -6,6 +6,66 @@
 if (!localStorage.getItem('token')) {
     window.location.href = 'login.html';
 }
+
+// ==========================================================================
+// TOAST NOTIFICATION SYSTEM
+// ==========================================================================
+function showToast(message, type = 'success') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;display:flex;flex-direction:column;gap:0.5rem;';
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    const colors = { success: '#10b981', error: '#ef4444', warning: '#f59e0b', info: '#3b82f6' };
+    const icons  = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
+    toast.style.cssText = `background:${colors[type] || colors.success};color:white;padding:0.75rem 1.25rem;border-radius:0.75rem;font-size:0.875rem;font-weight:500;box-shadow:0 4px 12px rgba(0,0,0,0.15);display:flex;align-items:center;gap:0.5rem;min-width:200px;max-width:360px;transform:translateX(120%);transition:transform 0.3s ease;`;
+    toast.innerHTML = `<span style="font-size:1rem;">${icons[type]}</span><span>${message}</span>`;
+    container.appendChild(toast);
+    requestAnimationFrame(() => { toast.style.transform = 'translateX(0)'; });
+    setTimeout(() => {
+        toast.style.transform = 'translateX(120%)';
+        setTimeout(() => toast.remove(), 300);
+    }, 3500);
+}
+
+// PO Item Management
+function addPurchaseItemRow(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    const prefix = containerId.startsWith('edit') ? 'edit' : 'add';
+    const row = document.createElement('div');
+    row.className = `form-row ${prefix}-purchase-item`;
+    row.style.marginBottom = '0.5rem';
+    
+    const productOptions = PRODUCTS.map(p => `<option value="${p.id}">${p.name} (Stok: ${p.stock})</option>`).join('');
+    
+    row.innerHTML = `
+        <div class="form-group" style="flex: 2;">
+            <select class="form-input item-product">
+                <option value="" disabled selected>Pilih Produk...</option>
+                ${productOptions}
+            </select>
+        </div>
+        <div class="form-group" style="flex: 1;">
+            <input type="number" class="form-input item-qty" placeholder="Qty">
+        </div>
+        <div class="form-group" style="flex: 1.5;">
+            <input type="number" class="form-input item-price" placeholder="Harga Beli">
+        </div>
+        <div class="form-group" style="flex: 0.5;">
+            <button type="button" class="btn-toolbar secondary" style="color:var(--rose-600);" onclick="this.parentElement.parentElement.remove()">
+                <i data-lucide="x" style="width:14px; height:14px;"></i>
+            </button>
+        </div>
+    `;
+    container.appendChild(row);
+    if (window.lucide) lucide.createIcons();
+}
+
 // ---------- Currency Formatter ----------
 function rp(n) {
     return 'Rp ' + Number(n).toLocaleString('id-ID');
@@ -23,42 +83,10 @@ let PRODUCTS = [];
 let CUSTOMERS = [];
 let VENDORS = [];
 
-let INVOICES = [
-    { id: 'INV-2026-0041', date: '2026-06-03', customerId: 'C001', customer: 'Toko Berkah Jaya', total: 2850000, paid: 2850000, type: 'Tunai', method: 'Transfer', status: 'lunas', dueDate: '2026-06-03' },
-    { id: 'INV-2026-0040', date: '2026-06-02', customerId: 'C003', customer: 'Kafe Nusantara', total: 4750000, paid: 2000000, type: 'Tempo', method: 'Transfer', status: 'sebagian', dueDate: '2026-06-16' },
-    { id: 'INV-2026-0039', date: '2026-06-02', customerId: 'C006', customer: 'Minimarket Jaya Abadi', total: 8200000, paid: 0, type: 'Tempo', method: '-', status: 'belum', dueDate: '2026-06-16' },
-    { id: 'INV-2026-0038', date: '2026-06-01', customerId: 'C002', customer: 'Warung Sari Rasa', total: 1250000, paid: 1250000, type: 'Tunai', method: 'Tunai', status: 'lunas', dueDate: '2026-06-01' },
-    { id: 'INV-2026-0037', date: '2026-06-01', customerId: 'C004', customer: 'Toko Makmur Sentosa', total: 3400000, paid: 1500000, type: 'DP', method: 'Transfer', status: 'sebagian', dueDate: '2026-06-15' },
-    { id: 'INV-2026-0036', date: '2026-05-31', customerId: 'C007', customer: 'Kedai Kopi Pagi', total: 2100000, paid: 2100000, type: 'Tunai', method: 'QRIS', status: 'lunas', dueDate: '2026-05-31' },
-    { id: 'INV-2026-0035', date: '2026-05-30', customerId: 'C005', customer: 'Warung Makan Bu Diah', total: 850000, paid: 0, type: 'Tempo', method: '-', status: 'belum', dueDate: '2026-06-13' },
-    { id: 'INV-2026-0034', date: '2026-05-30', customerId: 'C008', customer: 'Toko Sembako Ibu Rina', total: 1950000, paid: 0, type: 'Tempo', method: '-', status: 'belum', dueDate: '2026-06-13' },
-    { id: 'INV-2026-0033', date: '2026-05-29', customerId: 'C001', customer: 'Toko Berkah Jaya', total: 5200000, paid: 5200000, type: 'Tunai', method: 'Transfer', status: 'lunas', dueDate: '2026-05-29' },
-    { id: 'INV-2026-0032', date: '2026-05-28', customerId: 'C006', customer: 'Minimarket Jaya Abadi', total: 12500000, paid: 6000000, type: 'Tempo', method: 'Transfer', status: 'sebagian', dueDate: '2026-06-11' },
-];
-
-let PURCHASES = [
-    { id: 'PO-2026-018', date: '2026-06-02', vendorId: 'V001', vendor: 'PT Sumber Minuman Nusantara', total: 15600000, paid: 15600000, type: 'Lunas', status: 'selesai' },
-    { id: 'PO-2026-017', date: '2026-06-01', vendorId: 'V002', vendor: 'CV Pangan Makmur', total: 8400000, paid: 4200000, type: 'Tempo 14 Hari', status: 'proses' },
-    { id: 'PO-2026-016', date: '2026-05-30', vendorId: 'V004', vendor: 'PT Kopi Nusantara', total: 12500000, paid: 4000000, type: 'Tempo 30 Hari', status: 'proses' },
-    { id: 'PO-2026-015', date: '2026-05-28', vendorId: 'V003', vendor: 'UD Sembako Sentosa', total: 6200000, paid: 6200000, type: 'Lunas', status: 'selesai' },
-    { id: 'PO-2026-014', date: '2026-05-25', vendorId: 'V005', vendor: 'CV Bersih Sempurna', total: 3800000, paid: 3800000, type: 'Lunas', status: 'selesai' },
-    { id: 'PO-2026-013', date: '2026-05-22', vendorId: 'V001', vendor: 'PT Sumber Minuman Nusantara', total: 18200000, paid: 9000000, type: 'Tempo 14 Hari', status: 'proses' },
-];
-
-let CASH_TRANSACTIONS = [
-    { id: 'CT001', date: '2026-06-03', type: 'IN', category: 'Penjualan', desc: 'Pembayaran INV-2026-0041', amount: 2850000, method: 'Transfer Bank' },
-    { id: 'CT002', date: '2026-06-02', type: 'IN', category: 'Penjualan', desc: 'DP dari Kafe Nusantara', amount: 2000000, method: 'Transfer Bank' },
-    { id: 'CT003', date: '2026-06-02', type: 'OUT', category: 'Pembelian Stok', desc: 'Bayar PO-2026-018', amount: 15600000, method: 'Transfer Bank' },
-    { id: 'CT004', date: '2026-06-01', type: 'IN', category: 'Penjualan', desc: 'Pembayaran tunai Warung Sari Rasa', amount: 1250000, method: 'Tunai' },
-    { id: 'CT005', date: '2026-06-01', type: 'OUT', category: 'Operasional', desc: 'Listrik & air gudang', amount: 2500000, method: 'Transfer Bank' },
-    { id: 'CT006', date: '2026-06-01', type: 'IN', category: 'Penjualan', desc: 'DP Toko Makmur Sentosa', amount: 1500000, method: 'Transfer Bank' },
-    { id: 'CT007', date: '2026-05-31', type: 'IN', category: 'Penjualan', desc: 'Pembayaran QRIS Kedai Kopi Pagi', amount: 2100000, method: 'QRIS' },
-    { id: 'CT008', date: '2026-05-31', type: 'OUT', category: 'Gaji', desc: 'Gaji karyawan Mei 2026', amount: 8500000, method: 'Transfer Bank' },
-    { id: 'CT009', date: '2026-05-30', type: 'OUT', category: 'Pembelian Stok', desc: 'Bayar PO-2026-015', amount: 6200000, method: 'Transfer Bank' },
-    { id: 'CT010', date: '2026-05-29', type: 'IN', category: 'Penjualan', desc: 'Pembayaran INV-2026-0033', amount: 5200000, method: 'Transfer Bank' },
-    { id: 'CT011', date: '2026-05-28', type: 'IN', category: 'Piutang', desc: 'Cicilan Minimarket Jaya Abadi', amount: 6000000, method: 'Transfer Bank' },
-    { id: 'CT012', date: '2026-05-28', type: 'OUT', category: 'Sewa', desc: 'Sewa gudang Juni 2026', amount: 5000000, method: 'Transfer Bank' },
-];
+let INVOICES = [];
+let PURCHASES = [];
+let CASH_TRANSACTIONS = [];
+let USERS = [];
 
 // Sales data for chart (last 7 days)
 const SALES_CHART_DATA = [
@@ -302,14 +330,15 @@ function renderProducts(filter = '', category = '') {
                 <td>${p.category}</td>
                 <td>${rp(p.cost)}</td>
                 <td style="font-weight:700;">${rp(p.price)}</td>
-                <td style="font-weight:700;">${p.stock} ${p.unit}</td>
+                <td style="font-weight:700;">${p.stock}</td>
+                <td>${p.unit}</td>
                 <td>${p.minStock}</td>
                 <td><span class="badge-status ${stockStatus}">${stockLabel}</span></td>
                 <td style="text-align: right; white-space: nowrap;">
                     <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;" title="Edit Produk" onclick="openEditProductModal('${p.id}')">
                         <i data-lucide="edit-2" style="width: 14px; height: 14px; margin: 0;"></i>
                     </button>
-                    <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem; color: var(--blue-600);" title="Stock Opname" onclick="openModal('modal-stock-opname')">
+                    <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem; color: var(--blue-600);" title="Stock Opname" onclick="openStockOpnameModal('${p.id}')">
                         <i data-lucide="boxes" style="width: 14px; height: 14px; margin: 0;"></i>
                     </button>
                     <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--rose-500);" title="Hapus Produk" onclick="deleteProduct('${p.id}')">
@@ -319,6 +348,8 @@ function renderProducts(filter = '', category = '') {
             </tr>
         `;
     }).join('');
+    
+    if (window.lucide) lucide.createIcons();
 }
 
 // Search & filter bindings for products
@@ -457,7 +488,7 @@ function renderVendors(filter = '') {
 
     grid.innerHTML = filtered.map(v => `
         <div class="entity-card" style="position: relative;">
-            <button class="btn-toolbar secondary" style="position: absolute; top: 1rem; right: 1rem; padding: 0.25rem 0.5rem; font-size: 0.75rem;" title="Edit Vendor" onclick="openModal('modal-edit-vendor')">
+            <button class="btn-toolbar secondary" style="position: absolute; top: 1rem; right: 1rem; padding: 0.25rem 0.5rem; font-size: 0.75rem;" title="Edit Vendor" onclick="openEditVendorModal('${v.id}')">
                 <i data-lucide="edit-2" style="width: 14px; height: 14px; margin: 0;"></i>
             </button>
             <div class="entity-card-header">
@@ -498,7 +529,7 @@ function renderVendors(filter = '') {
                 <td>${v.phone}</td>
                 <td style="font-weight:700; color: ${v.debt > 0 ? 'var(--rose-500)' : 'var(--emerald-500)'};">${v.debt > 0 ? rp(v.debt) : 'Lunas ✓'}</td>
                 <td style="text-align: right; white-space: nowrap;">
-                    <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" title="Edit Vendor" onclick="openModal('modal-edit-vendor')">
+                    <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" title="Edit Vendor" onclick="openEditVendorModal('${v.id}')">
                         <i data-lucide="edit-2" style="width: 14px; height: 14px; margin: 0;"></i>
                     </button>
                 </td>
@@ -543,10 +574,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ---------- Purchases Page ----------
 function renderPurchases(filter = '') {
+    if (!filter || typeof filter !== 'string') {
+        const sel = document.getElementById('purchase-status-filter');
+        filter = sel ? sel.value : 'all';
+    }
     const tbody = document.getElementById('purchases-body');
     let filtered = PURCHASES;
     if (filter && filter !== 'all') {
-        filtered = filtered.filter(p => p.status === filter);
+        filtered = filtered.filter(p => p.status.toLowerCase() === filter);
+    }
+    const searchEl = document.getElementById('purchase-search');
+    if (searchEl && searchEl.value) {
+        const q = searchEl.value.toLowerCase();
+        filtered = filtered.filter(p => 
+            p.id.toLowerCase().includes(q) || 
+            (p.vendor && p.vendor.toLowerCase().includes(q))
+        );
     }
 
     tbody.innerHTML = filtered.map(p => `
@@ -557,17 +600,17 @@ function renderPurchases(filter = '') {
             <td style="font-weight:700;">${rp(p.total)}</td>
             <td>${rp(p.paid)}</td>
             <td>${p.type}</td>
-            <td><span class="badge-status ${p.status}">${capitalize(p.status)}</span></td>
+            <td><span class="badge-status ${p.status.toLowerCase()}">${capitalize(p.status)}</span></td>
             <td style="text-align: right; white-space: nowrap;">
                 <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;" title="Cetak PO" onclick="openModal('modal-print-po')">
                     <i data-lucide="printer" style="width: 14px; height: 14px; margin: 0;"></i>
                 </button>
-                <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;" title="Edit PO" onclick="openModal('modal-edit-purchase')">
+                <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;" title="Edit PO" onclick="openEditPurchaseModal('${p.id}')">
                     <i data-lucide="edit-2" style="width: 14px; height: 14px; margin: 0;"></i>
                 </button>
-                <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--rose-500);" title="Batalkan PO" onclick="openModal('modal-cancel-purchase')">
+                ${p.status.toLowerCase() !== 'batal' ? `<button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--rose-500);" title="Batalkan PO" onclick="cancelPurchase('${p.id}')">
                     <i data-lucide="x-circle" style="width: 14px; height: 14px; margin: 0;"></i>
-                </button>
+                </button>` : ''}
             </td>
         </tr>
     `).join('');
@@ -577,12 +620,24 @@ function renderPurchases(filter = '') {
 
 // ---------- Invoices Page ----------
 function renderInvoices(filter = '') {
+    if (!filter || typeof filter !== 'string') {
+        const sel = document.getElementById('invoice-status-filter');
+        filter = sel ? sel.value : 'all';
+    }
     const tbody = document.getElementById('invoices-body');
     if (!tbody) return;
     
     let filtered = INVOICES;
     if (filter && filter !== 'all') {
-        filtered = filtered.filter(i => i.status === filter);
+        filtered = filtered.filter(i => i.status.toLowerCase() === filter);
+    }
+    const searchEl = document.getElementById('invoice-search');
+    if (searchEl && searchEl.value) {
+        const q = searchEl.value.toLowerCase();
+        filtered = filtered.filter(i => 
+            i.id.toLowerCase().includes(q) || 
+            (i.customer && i.customer.toLowerCase().includes(q))
+        );
     }
 
     tbody.innerHTML = filtered.map(inv => `
@@ -593,18 +648,18 @@ function renderInvoices(filter = '') {
             <td style="font-weight:700;">${rp(inv.total)}</td>
             <td>${rp(inv.paid)}</td>
             <td>${inv.type}</td>
-            <td><span class="badge-status ${inv.status}">${capitalize(inv.status)}</span></td>
+            <td><span class="badge-status ${inv.status.toLowerCase()}">${capitalize(inv.status)}</span></td>
             <td style="text-align: right; white-space: nowrap;">
                 <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;" title="Print Preview" onclick="openModal('modal-print-invoice')">
                     <i data-lucide="printer" style="width: 14px; height: 14px; margin: 0;"></i>
                 </button>
-                <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;" title="Edit Invoice" onclick="openModal('modal-edit-invoice')">
+                <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;" title="Edit Invoice" onclick="openEditInvoiceModal('${inv.id}')">
                     <i data-lucide="edit-2" style="width: 14px; height: 14px; margin: 0;"></i>
                 </button>
-                <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem; color: var(--rose-500);" title="Batalkan Invoice" onclick="openModal('modal-cancel-invoice')">
+                ${inv.status.toLowerCase() !== 'batal' ? `<button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem; color: var(--rose-500);" title="Batalkan Invoice" onclick="cancelInvoice('${inv.id}')">
                     <i data-lucide="x-circle" style="width: 14px; height: 14px; margin: 0;"></i>
-                </button>
-                ${inv.status !== 'lunas' ? `<button class="btn-toolbar primary" style="padding:0.25rem 0.5rem; font-size:0.75rem;" onclick="openModal('modal-payment')">Bayar</button>` : ''}
+                </button>` : ''}
+                ${inv.status.toLowerCase() !== 'lunas' && inv.status.toLowerCase() !== 'batal' ? `<button class="btn-toolbar primary" style="padding:0.25rem 0.5rem; font-size:0.75rem;" onclick="openPiutangPaymentModal('${inv.id}', ${inv.total - inv.paid})">Bayar</button>` : ''}
             </td>
         </tr>
     `).join('');
@@ -614,11 +669,15 @@ function renderInvoices(filter = '') {
 
 // ---------- Piutang Page ----------
 function renderPiutang(filter = '') {
+    if (!filter || typeof filter !== 'string') {
+        const sel = document.getElementById('piutang-status-filter');
+        filter = sel ? sel.value : 'all';
+    }
     // Summary
-    const piutangInvoices = INVOICES.filter(i => i.status !== 'lunas');
+    const piutangInvoices = INVOICES.filter(i => i.status.toLowerCase() !== 'lunas');
     const totalPiutang = piutangInvoices.reduce((s, i) => s + (i.total - i.paid), 0);
-    const belumBayar = INVOICES.filter(i => i.status === 'belum').reduce((s, i) => s + i.total, 0);
-    const sebagian = INVOICES.filter(i => i.status === 'sebagian').reduce((s, i) => s + (i.total - i.paid), 0);
+    const belumBayar = INVOICES.filter(i => i.status.toLowerCase() === 'belum').reduce((s, i) => s + i.total, 0);
+    const sebagian = INVOICES.filter(i => i.status.toLowerCase() === 'sebagian').reduce((s, i) => s + (i.total - i.paid), 0);
 
     document.getElementById('piutang-summary').innerHTML = `
         <div class="finance-summary-card highlight">
@@ -639,7 +698,15 @@ function renderPiutang(filter = '') {
     const tbody = document.getElementById('piutang-body');
     let filtered = INVOICES.filter(i => i.type === 'Tempo' || i.type === 'DP');
     if (filter && filter !== 'all') {
-        filtered = filtered.filter(i => i.status === filter);
+        filtered = filtered.filter(i => i.status.toLowerCase() === filter);
+    }
+    const searchEl = document.getElementById('piutang-search');
+    if (searchEl && searchEl.value) {
+        const q = searchEl.value.toLowerCase();
+        filtered = filtered.filter(i => 
+            i.id.toLowerCase().includes(q) || 
+            (i.customer && i.customer.toLowerCase().includes(q))
+        );
     }
 
     tbody.innerHTML = filtered.map(inv => {
@@ -650,10 +717,10 @@ function renderPiutang(filter = '') {
                 <td>${inv.customer}</td>
                 <td style="font-weight:700;">${rp(inv.total)}</td>
                 <td>${rp(inv.paid)}</td>
-                <td style="font-weight:700; color: ${sisa > 0 ? 'var(--rose-500)' : 'var(--emerald-500)'};">${rp(sisa)}</td>
+                <td style="font-weight:700; color: ${sisa > 0 ? 'var(--rose-500)' : 'var(--emerald-500)'}">${rp(sisa)}</td>
                 <td>${inv.dueDate}</td>
-                <td><span class="badge-status ${inv.status}">${capitalize(inv.status)}</span></td>
-                <td>${inv.status !== 'lunas' ? `<button class="btn-toolbar primary" style="padding:0.3rem 0.65rem; font-size:0.75rem;" onclick="openModal('modal-payment')">Input Bayar</button>` : '—'}</td>
+                <td><span class="badge-status ${inv.status.toLowerCase()}">${capitalize(inv.status)}</span></td>
+                <td>${inv.status.toLowerCase() !== 'lunas' ? `<button class="btn-toolbar primary" style="padding:0.3rem 0.65rem; font-size:0.75rem;" onclick="openPiutangPaymentModal('${inv.id}', ${sisa})">Input Bayar</button>` : '—'}</td>
             </tr>
         `;
     }).join('');
@@ -661,6 +728,10 @@ function renderPiutang(filter = '') {
 
 // ---------- Hutang Page ----------
 function renderHutang(filter = '') {
+    if (!filter || typeof filter !== 'string') {
+        const sel = document.getElementById('hutang-status-filter');
+        filter = sel ? sel.value : 'all';
+    }
     const totalHutang = VENDORS.reduce((s, v) => s + v.debt, 0);
     const vendorsWithDebt = VENDORS.filter(v => v.debt > 0);
 
@@ -681,11 +752,19 @@ function renderHutang(filter = '') {
 
     // Convert purchases to hutang rows
     const tbody = document.getElementById('hutang-body');
-    let purchaseData = PURCHASES.filter(p => p.paid < p.total);
+    let purchaseData = PURCHASES;
     if (filter === 'lunas') {
         purchaseData = PURCHASES.filter(p => p.paid >= p.total);
     } else if (filter === 'belum') {
         purchaseData = PURCHASES.filter(p => p.paid < p.total);
+    }
+    const searchEl = document.getElementById('hutang-search');
+    if (searchEl && searchEl.value) {
+        const q = searchEl.value.toLowerCase();
+        purchaseData = purchaseData.filter(p => 
+            p.id.toLowerCase().includes(q) || 
+            (p.vendor && p.vendor.toLowerCase().includes(q))
+        );
     }
 
     tbody.innerHTML = purchaseData.map(p => {
@@ -697,10 +776,10 @@ function renderHutang(filter = '') {
                 <td>${p.vendor}</td>
                 <td style="font-weight:700;">${rp(p.total)}</td>
                 <td>${rp(p.paid)}</td>
-                <td style="font-weight:700; color: ${sisa > 0 ? 'var(--rose-500)' : 'var(--emerald-500)'};">${rp(sisa)}</td>
+                <td style="font-weight:700; color: ${sisa > 0 ? 'var(--rose-500)' : 'var(--emerald-500)'}">${rp(sisa)}</td>
                 <td>${p.date}</td>
                 <td><span class="badge-status ${st}">${sisa > 0 ? 'Belum Lunas' : 'Lunas'}</span></td>
-                <td>${sisa > 0 ? `<button class="btn-toolbar primary" style="padding:0.3rem 0.65rem; font-size:0.75rem;" onclick="openModal('modal-payment')">Bayar</button>` : '—'}</td>
+                <td>${sisa > 0 ? `<button class="btn-toolbar primary" style="padding:0.3rem 0.65rem; font-size:0.75rem;" onclick="openHutangPaymentModal('${p.id}', ${sisa})">Bayar</button>` : '—'}</td>
             </tr>
         `;
     }).join('');
@@ -969,7 +1048,11 @@ function renderCart() {
         <div class="cart-item">
             <div class="cart-item-info">
                 <div class="cart-item-name">${item.emoji} ${item.name}</div>
-                <div class="cart-item-price">${rp(item.price)} / ${item.unit}</div>
+                <div class="cart-item-price-edit" style="display:flex; align-items:center; gap:0.25rem;">
+                    <span style="font-size:0.75rem; color:var(--gray-500);">Rp</span>
+                    <input type="number" value="${item.price}" onchange="updateCartPrice('${item.id}', this.value)" style="width:70px; padding:0.1rem 0.25rem; font-size:0.875rem; border:1px solid var(--gray-200); border-radius:0.25rem;" />
+                    <span style="font-size:0.75rem; color:var(--gray-500);">/ ${item.unit}</span>
+                </div>
             </div>
             <div class="cart-item-qty">
                 <button class="cart-qty-btn" onclick="updateCartQty('${item.id}', -1)">−</button>
@@ -980,6 +1063,14 @@ function renderCart() {
             <button class="cart-item-remove" onclick="removeFromCart('${item.id}')"><i data-lucide="trash-2"></i></button>
         </div>
     `).join('');
+
+    window.updateCartPrice = (id, newPrice) => {
+        const item = cart.find(c => c.id === id);
+        if (item) {
+            item.price = parseFloat(newPrice) || 0;
+            renderCart();
+        }
+    };
 
     const subtotal = cart.reduce((s, c) => s + c.price * c.qty, 0);
     const discount = 0; // if there is discount logic
@@ -1030,11 +1121,75 @@ document.querySelectorAll('.cart-payment-btn').forEach(btn => {
 });
 
 // Checkout
-document.getElementById('btn-checkout')?.addEventListener('click', () => {
+document.getElementById('btn-checkout')?.addEventListener('click', async () => {
     if (cart.length === 0) return;
-    openModal('modal-checkout-success');
-    cart = [];
-    renderCart();
+    
+    const customerId = document.getElementById('pos-customer-id').value;
+    if (!customerId) {
+        showToast('Silakan pilih pelanggan terlebih dahulu.', 'warning');
+        return;
+    }
+    
+    const paymentTypeSelect = document.getElementById('cart-payment-type');
+    const payment_type_id = paymentTypeSelect ? paymentTypeSelect.value : 'PT-1';
+    // Let's deduce payTypeStr from payment_type_id to know if it's DP or Tempo
+    // In our DB: PT-1: Tunai, PT-2: Tempo, PT-3: DP
+    let payTypeStr = 'tunai';
+    if (payment_type_id === 'PT-2') payTypeStr = 'tempo';
+    else if (payment_type_id === 'PT-3') payTypeStr = 'dp';
+    
+    const subtotal = cart.reduce((s, c) => s + c.price * c.qty, 0);
+    const ppnAmount = subtotal * (currentPpnRate / 100);
+    const total = subtotal + ppnAmount;
+    
+    let paid = total;
+    if (payTypeStr === 'tempo') {
+        paid = 0;
+    } else if (payTypeStr === 'dp') {
+        const dpPrompt = prompt(`Total belanja: ${rp(total)}. Masukkan jumlah uang muka (DP):`, (total / 2).toString());
+        if (dpPrompt === null) return;
+        paid = parseFloat(dpPrompt) || 0;
+    }
+    
+    const payload = {
+        customer_id: customerId,
+        total: total,
+        paid: paid,
+        payment_type_id: payment_type_id,
+        items: cart.map(item => ({
+            id: item.id,
+            quantity: item.qty,
+            price: item.price
+        }))
+    };
+    
+    try {
+        const res = await fetch('/api/invoices', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        if (res.ok && result.success) {
+            const successDesc = document.querySelector('#modal-checkout-success p');
+            if (successDesc) successDesc.textContent = `Invoice ${result.invoiceId} telah dicatat. Stok produk telah diperbarui secara otomatis.`;
+            openModal('modal-checkout-success');
+            cart = [];
+            document.getElementById('pos-customer-id').value = '';
+            document.getElementById('pos-customer-search').value = '';
+            renderCart();
+            await fetchProducts();
+            renderPOSProducts(); // Fix: Update POS product list to reflect new stock
+            await fetchInvoices();
+            await fetchCashTransactions();
+            await renderDashboard();
+        } else {
+            alert('Gagal membuat invoice: ' + (result.error || 'Terjadi kesalahan'));
+        }
+    } catch(err) {
+        console.error(err);
+        alert('Gagal menghubungi server');
+    }
 });
 
 // Populate customer select in POS
@@ -1155,8 +1310,14 @@ async function init() {
     renderVendors();
     
     // We will fetch products and customers dynamically instead of rendering mock data first
+    await populateMasterDropdowns();
     await fetchProducts();
     await fetchCustomers();
+    await fetchVendors();
+    await fetchPurchases();
+    await fetchInvoices();
+    await fetchCashTransactions();
+    await fetchUsers();
 
     renderInvoices();
     renderPiutang();
@@ -1167,6 +1328,12 @@ async function init() {
     renderReports();
     renderPOSProducts();
     populateCustomerSelect();
+
+    const btnAddPoItem = document.getElementById('btn-add-purchase-item');
+    if (btnAddPoItem) btnAddPoItem.addEventListener('click', () => addPurchaseItemRow('add-purchase-items-container'));
+    
+    const btnEditPoItem = document.getElementById('btn-edit-purchase-item');
+    if (btnEditPoItem) btnEditPoItem.addEventListener('click', () => addPurchaseItemRow('edit-purchase-items-container'));
 
     // Initialize Lucide icons
     if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -1187,11 +1354,13 @@ async function fetchProducts() {
             sku: p.sku,
             name: p.name,
             category: p.category,
+            category_id: p.category_id,
             cost: parseFloat(p.cost_price),
             price: parseFloat(p.sell_price),
             stock: p.stock,
             minStock: p.min_stock,
-            unit: p.badge || 'pcs',
+            unit: p.unit || p.badge || 'pcs',
+            unit_id: p.unit_id,
             emoji: '📦'
         }));
         renderProducts(document.getElementById('product-search')?.value, document.getElementById('product-category-filter')?.value);
@@ -1203,17 +1372,27 @@ async function fetchProducts() {
 async function saveProduct(isEdit) {
     const id = isEdit ? document.getElementById('edit-product-id').value : null;
     const prefix = isEdit ? 'edit' : 'add';
-    
+
+    const categoryEl = document.getElementById(`${prefix}-product-category`);
+    // category_id is the value from the select (populated with name or id depending on master)
+    const categoryValue = categoryEl ? categoryEl.value : '';
+
     const payload = {
         name: document.getElementById(`${prefix}-product-name`).value,
         sku: document.getElementById(`${prefix}-product-sku`).value,
-        category: document.getElementById(`${prefix}-product-category`).value,
-        cost_price: document.getElementById(`${prefix}-product-cost`).value,
-        sell_price: document.getElementById(`${prefix}-product-price`).value,
-        stock: isEdit ? document.getElementById('edit-product-stock').value : document.getElementById('add-product-stock').value,
-        min_stock: document.getElementById(`${prefix}-product-minstock`).value,
+        category_id: categoryValue,   // FIX: backend expects category_id not category
+        cost_price: parseFloat(document.getElementById(`${prefix}-product-cost`).value) || 0,
+        sell_price: parseFloat(document.getElementById(`${prefix}-product-price`).value) || 0,
+        stock: isEdit ? parseInt(document.getElementById('edit-product-stock').value) || 0 : parseInt(document.getElementById('add-product-stock').value) || 0,
+        min_stock: parseInt(document.getElementById(`${prefix}-product-minstock`).value) || 0,
+        unit_id: isEdit ? document.getElementById('edit-product-unit').value : document.getElementById('add-product-unit').value,
         badge: isEdit ? document.getElementById('edit-product-unit').value : document.getElementById('add-product-unit').value
     };
+
+    if (!payload.name || !payload.sku) {
+        showToast('Nama produk dan SKU wajib diisi!', 'warning');
+        return;
+    }
 
     const url = isEdit ? `/api/products/${id}` : '/api/products';
     const method = isEdit ? 'PUT' : 'POST';
@@ -1226,14 +1405,15 @@ async function saveProduct(isEdit) {
         });
         if (res.ok) {
             closeModal(`modal-${isEdit ? 'edit' : 'add'}-product`);
-            fetchProducts();
+            showToast(isEdit ? 'Produk berhasil diperbarui!' : 'Produk berhasil ditambahkan!', 'success');
+            await fetchProducts();
         } else {
             const err = await res.json();
-            alert('Error: ' + err.error);
+            showToast('Error: ' + (err.error || 'Gagal menyimpan produk'), 'error');
         }
     } catch (err) {
         console.error(err);
-        alert('Gagal menyimpan produk');
+        showToast('Gagal menghubungi server', 'error');
     }
 }
 
@@ -1243,13 +1423,71 @@ function openEditProductModal(id) {
     document.getElementById('edit-product-id').value = p.id;
     document.getElementById('edit-product-name').value = p.name;
     document.getElementById('edit-product-sku').value = p.sku;
-    document.getElementById('edit-product-category').value = p.category;
+    // FIX: set category select — try both category_id and category name
+    const catEl = document.getElementById('edit-product-category');
+    if (catEl) {
+        // Try setting by value (which is the name from master)
+        catEl.value = p.category || '';
+        if (!catEl.value && p.category_id) catEl.value = p.category_id;
+    }
     document.getElementById('edit-product-cost').value = p.cost;
     document.getElementById('edit-product-price').value = p.price;
     document.getElementById('edit-product-stock').value = p.stock;
     document.getElementById('edit-product-minstock').value = p.minStock;
-    document.getElementById('edit-product-unit').value = p.unit;
+    const unitEl = document.getElementById('edit-product-unit');
+    if (unitEl) unitEl.value = p.unit_id || p.unit || '';
     openModal('modal-edit-product');
+}
+
+// ==========================================================================
+// STOCK OPNAME
+// ==========================================================================
+let stockOpnameProductId = null;
+
+function openStockOpnameModal(id) {
+    const p = PRODUCTS.find(x => x.id === id);
+    if (!p) return;
+    stockOpnameProductId = p.id;
+    const nameEl = document.querySelector('#modal-stock-opname .form-group:nth-child(1) input');
+    const stockEl = document.querySelector('#modal-stock-opname .form-row .form-group:first-child input');
+    const actualEl = document.querySelector('#modal-stock-opname .form-row .form-group:last-child input');
+    const noteEl  = document.querySelector('#modal-stock-opname textarea');
+    if (nameEl)   nameEl.value  = p.name;
+    if (stockEl)  stockEl.value = p.stock;
+    if (actualEl) actualEl.value = '';
+    if (noteEl)   noteEl.value   = '';
+    openModal('modal-stock-opname');
+}
+
+async function submitStockOpname() {
+    if (!stockOpnameProductId) return;
+    const actualEl = document.querySelector('#modal-stock-opname .form-row .form-group:last-child input');
+    const noteEl   = document.querySelector('#modal-stock-opname textarea');
+    const actual   = parseInt(actualEl ? actualEl.value : '');
+    if (isNaN(actual) || actual < 0) {
+        showToast('Masukkan jumlah stok fisik yang valid!', 'warning');
+        return;
+    }
+    const note = noteEl ? noteEl.value : '';
+    try {
+        const res = await fetch('/api/stock-adjust', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ product_id: stockOpnameProductId, actual_stock: actual, note })
+        });
+        if (res.ok) {
+            closeModal('modal-stock-opname');
+            showToast('Stok berhasil disesuaikan!', 'success');
+            stockOpnameProductId = null;
+            await fetchProducts();
+        } else {
+            const err = await res.json();
+            showToast('Gagal: ' + (err.error || 'Terjadi kesalahan'), 'error');
+        }
+    } catch (err) {
+        console.error(err);
+        showToast('Gagal menghubungi server', 'error');
+    }
 }
 
 async function deleteProduct(id) {
@@ -1276,10 +1514,11 @@ async function fetchCustomers() {
         CUSTOMERS = data.map(c => ({
             id: c.id,
             name: c.name,
-            type: c.type,
+            type: c.category_name || c.customer_category_id || c.type || '',
+            categoryId: c.customer_category_id || '',
             phone: c.phone,
             city: c.city,
-            creditLimit: parseFloat(c.credit_lmt),
+            creditLimit: parseFloat(c.credit_lmt) || 0,
             totalSpent: 0,
             totalOrders: 0,
             color: 'blue'
@@ -1296,7 +1535,7 @@ async function saveCustomer(isEdit) {
     
     const payload = {
         name: document.getElementById(`${prefix}-customer-name`).value,
-        type: document.getElementById(`${prefix}-customer-type`).value,
+        customer_category_id: document.getElementById(`${prefix}-customer-type`).value,
         city: document.getElementById(`${prefix}-customer-city`).value,
         phone: document.getElementById(`${prefix}-customer-phone`).value,
         credit_lmt: document.getElementById(`${prefix}-customer-limit`).value
@@ -1330,7 +1569,7 @@ function openEditCustomerModal(id) {
     document.getElementById('edit-customer-id').value = c.id;
     document.getElementById('edit-customer-id-display').value = c.id;
     document.getElementById('edit-customer-name').value = c.name;
-    document.getElementById('edit-customer-type').value = c.type;
+    document.getElementById('edit-customer-type').value = c.categoryId;
     document.getElementById('edit-customer-city').value = c.city;
     document.getElementById('edit-customer-phone').value = c.phone;
     document.getElementById('edit-customer-limit').value = c.creditLimit;
@@ -1354,8 +1593,874 @@ async function deleteCustomer(id) {
     }
 }
 
+// ==========================================================================
+// VENDORS — CRUD
+// ==========================================================================
+
+async function fetchVendors() {
+    try {
+        const res = await fetch('/api/vendors', { headers: getAuthHeaders() });
+        const data = await res.json();
+        VENDORS = data.map(v => ({
+            id: v.id,
+            name: v.name,
+            category: v.category_name || v.vendor_category_id || '',
+            categoryId: v.vendor_category_id || '',
+            phone: v.phone,
+            city: v.city,
+            address: v.address,
+            bank: v.nama_bank || v.bank_account,
+            rekening: v.nomor_rek,
+            pemilik: v.pemilik_rek,
+            idNumber: v.id_number,
+            npwp: v.npwp,
+            debt: parseFloat(v.debt) || 0
+        }));
+        
+        // Populate vendor dropdowns in PO modals
+        const vendorOptions = '<option value="" disabled selected>- Pilih Vendor -</option>' + 
+            VENDORS.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+        const addVendorEl = document.getElementById('add-purchase-vendor');
+        if (addVendorEl) addVendorEl.innerHTML = vendorOptions;
+        const editVendorEl = document.getElementById('edit-purchase-vendor');
+        if (editVendorEl) editVendorEl.innerHTML = vendorOptions;
+        
+        renderVendors(document.getElementById('vendor-search')?.value);
+    } catch (err) {
+        console.error('Failed to fetch vendors', err);
+    }
+}
+
+async function saveVendor(isEdit) {
+    const id = isEdit ? document.getElementById('edit-vendor-id').value : null;
+    const prefix = isEdit ? 'edit' : 'add';
+    
+    const payload = {
+        name: document.getElementById(`${prefix}-vendor-name`)?.value || '',
+        vendor_category_id: document.getElementById(`${prefix}-vendor-category`)?.value || '',
+        phone: document.getElementById(`${prefix}-vendor-phone`)?.value || '',
+        city: document.getElementById(`${prefix}-vendor-city`)?.value || '',
+        address: document.getElementById(`${prefix}-vendor-address`)?.value || '',
+        nama_bank: document.getElementById(`${prefix}-vendor-bank`)?.value || '',
+        nomor_rek: document.getElementById(`${prefix}-vendor-rekening`)?.value || '',
+        pemilik_rek: document.getElementById(`${prefix}-vendor-pemilik`)?.value || '',
+        id_number: document.getElementById(`${prefix}-vendor-idnumber`)?.value || '',
+        npwp: document.getElementById(`${prefix}-vendor-npwp`)?.value || ''
+    };
+
+    const url = isEdit ? `/api/vendors/${id}` : '/api/vendors';
+    const method = isEdit ? 'PUT' : 'POST';
+
+    try {
+        const res = await fetch(url, {
+            method,
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            closeModal(`modal-${isEdit ? 'edit' : 'add'}-vendor`);
+            fetchVendors();
+        } else {
+            const err = await res.json();
+            alert('Error: ' + err.error);
+        }
+    } catch (err) {
+        console.error(err);
+        alert('Gagal menyimpan vendor');
+    }
+}
+
+function openAddVendorModal() {
+    const fields = ['name', 'category', 'phone', 'city', 'address', 'bank', 'rekening', 'pemilik', 'idnumber'];
+    fields.forEach(f => {
+        const el = document.getElementById(`add-vendor-${f}`);
+        if (el) el.value = '';
+    });
+    openModal('modal-add-vendor');
+}
+
+function openEditVendorModal(id) {
+    const v = VENDORS.find(x => x.id === id);
+    if (!v) return;
+    document.getElementById('edit-vendor-id').value = v.id;
+    document.getElementById('edit-vendor-id-display').value = v.id;
+    document.getElementById('edit-vendor-name').value = v.name;
+    document.getElementById('edit-vendor-category').value = v.categoryId || '';
+    document.getElementById('edit-vendor-phone').value = v.phone || '';
+    document.getElementById('edit-vendor-city').value = v.city || '';
+    document.getElementById('edit-vendor-address').value = v.address || '';
+    if(document.getElementById('edit-vendor-bank')) document.getElementById('edit-vendor-bank').value = v.bank || '';
+    if(document.getElementById('edit-vendor-rekening')) document.getElementById('edit-vendor-rekening').value = v.rekening || '';
+    if(document.getElementById('edit-vendor-pemilik')) document.getElementById('edit-vendor-pemilik').value = v.pemilik || '';
+    if(document.getElementById('edit-vendor-idnumber')) document.getElementById('edit-vendor-idnumber').value = v.idNumber || '';
+    openModal('modal-edit-vendor');
+}
+
+async function deleteVendor(id) {
+    if (!confirm('Yakin ingin menghapus vendor ini?')) return;
+    try {
+        const res = await fetch(`/api/vendors/${id}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            fetchVendors();
+        } else {
+            alert('Gagal menghapus vendor');
+        }
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+// ==========================================================================
+// PURCHASE ORDERS — CRUD
+// ==========================================================================
+
+async function fetchPurchases() {
+    try {
+        const res = await fetch('/api/purchases', { headers: getAuthHeaders() });
+        const data = await res.json();
+        PURCHASES = data;
+        renderPurchases();
+    } catch (err) {
+        console.error('Failed to fetch purchases', err);
+    }
+}
+
+// FIX: open add-purchase modal with cleared form
+function openAddPurchaseModal() {
+    // Reset all fields
+    const vendorEl = document.getElementById('add-purchase-vendor');
+    const dateEl   = document.getElementById('add-purchase-date');
+    const paidEl   = document.getElementById('add-purchase-paid');
+    const ptEl     = document.getElementById('add-purchase-payment-type');
+    if (vendorEl) vendorEl.selectedIndex = 0;
+    if (dateEl)   dateEl.value = new Date().toISOString().split('T')[0];
+    if (paidEl)   paidEl.value = '';
+    if (ptEl)     ptEl.selectedIndex = 0;
+    // Clear items container
+    const itemsContainer = document.getElementById('add-purchase-items-container');
+    if (itemsContainer) itemsContainer.innerHTML = '';
+    openModal('modal-add-purchase');
+}
+
+let editPurchaseItems = [];
+
+function renderEditPurchaseItems() {
+    const container = document.getElementById('edit-purchase-items-container');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    let subtotal = 0;
+    
+    editPurchaseItems.forEach((item, index) => {
+        const product = PRODUCTS.find(p => p.id === item.product_id) || { name: item.product_id, unit: 'pcs' };
+        const itemTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.price) || 0);
+        subtotal += itemTotal;
+        
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="padding: 0.5rem;">
+                <div style="font-weight: 500; color: var(--gray-900);">${product.name}</div>
+            </td>
+            <td style="padding: 0.5rem; text-align: center;">
+                <input type="number" min="1" value="${item.quantity}" onchange="updateEditPurchaseItemQty(${index}, this.value)" style="width: 60px; padding: 0.25rem; border: 1px solid var(--gray-200); border-radius: 0.25rem; text-align: center;">
+            </td>
+            <td style="padding: 0.5rem; text-align: right;">
+                <div style="display:flex; align-items:center; justify-content:flex-end; gap:0.25rem;">
+                    <span style="font-size:0.75rem; color:var(--gray-500);">Rp</span>
+                    <input type="number" value="${item.price}" onchange="updateEditPurchaseItemPrice(${index}, this.value)" style="width: 80px; padding: 0.25rem; border: 1px solid var(--gray-200); border-radius: 0.25rem; text-align: right;">
+                </div>
+            </td>
+            <td style="padding: 0.5rem; text-align: right; font-weight: 600; color: var(--gray-900);">
+                ${rp(itemTotal)}
+            </td>
+            <td style="padding: 0.5rem; text-align: center;">
+                <button type="button" onclick="removeEditPurchaseItem(${index})" style="color: var(--rose-500); background: none; border: none; cursor: pointer; padding: 0.25rem;">
+                    <i data-lucide="trash-2" style="width: 16px; height: 16px;"></i>
+                </button>
+            </td>
+        `;
+        container.appendChild(tr);
+    });
+    
+    if (editPurchaseItems.length === 0) {
+        container.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 1rem; color: var(--gray-500);">Belum ada item.</td></tr>`;
+    }
+    
+    document.getElementById('edit-purchase-total').textContent = rp(subtotal);
+    
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+window.addEditPurchaseItem = () => {
+    const select = document.getElementById('edit-purchase-product-select');
+    if (!select || !select.value) return;
+    
+    const prod = PRODUCTS.find(p => p.id === select.value);
+    if (!prod) return;
+    
+    const existing = editPurchaseItems.find(i => i.product_id === prod.id);
+    if (existing) {
+        existing.quantity += 1;
+    } else {
+        editPurchaseItems.push({
+            product_id: prod.id,
+            quantity: 1,
+            price: prod.cost || prod.price
+        });
+    }
+    renderEditPurchaseItems();
+};
+
+window.removeEditPurchaseItem = (index) => {
+    editPurchaseItems.splice(index, 1);
+    renderEditPurchaseItems();
+};
+
+window.updateEditPurchaseItemQty = (index, val) => {
+    const qty = parseInt(val);
+    if (qty > 0) {
+        editPurchaseItems[index].quantity = qty;
+    } else {
+        editPurchaseItems[index].quantity = 1;
+    }
+    renderEditPurchaseItems();
+};
+
+window.updateEditPurchaseItemPrice = (index, val) => {
+    const price = parseFloat(val);
+    if (price >= 0) {
+        editPurchaseItems[index].price = price;
+    }
+    renderEditPurchaseItems();
+};
+
+// FIX: open edit-purchase modal and load existing items
+async function openEditPurchaseModal(id) {
+    const po = PURCHASES.find(x => x.id === id);
+    if (!po) return;
+
+    // Fill header fields
+    const idEl     = document.getElementById('edit-purchase-id');
+    const vendorEl = document.getElementById('edit-purchase-vendor');
+    const dateEl   = document.getElementById('edit-purchase-date');
+    const paidEl   = document.getElementById('edit-purchase-paid');
+    const ptEl     = document.getElementById('edit-purchase-payment-type');
+
+    if (idEl)     idEl.value     = po.id;
+    if (vendorEl) vendorEl.value = po.vendorId || '';
+    if (dateEl)   dateEl.value   = (po.date || '').split('T')[0];
+    if (paidEl)   paidEl.value   = po.paid || '';
+    if (ptEl)     ptEl.value     = po.paymentTypeId || '';
+
+    // Populate product select
+    const select = document.getElementById('edit-purchase-product-select');
+    if (select) {
+        select.innerHTML = '<option value="" disabled selected>- Pilih Produk -</option>' + 
+            PRODUCTS.map(p => `<option value="${p.id}">${p.name} (${rp(p.cost || p.price)})</option>`).join('');
+    }
+
+    const container = document.getElementById('edit-purchase-items-container');
+    if (container) container.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 1rem; color: var(--gray-400);">Memuat data item...</td></tr>';
+
+    try {
+        const res = await fetch(`/api/purchases/${id}/items`, { headers: getAuthHeaders() });
+        if (res.ok) {
+            editPurchaseItems = await res.json();
+            renderEditPurchaseItems();
+        }
+    } catch (err) {
+        console.error('Failed to load PO items', err);
+        if (container) container.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 1rem; color: var(--rose-500);">Gagal memuat data item</td></tr>';
+    }
+
+    openModal('modal-edit-purchase');
+}
+
+async function savePurchase(isEdit) {
+    const id = isEdit ? document.getElementById('edit-purchase-id').value : null;
+    const prefix = isEdit ? 'edit' : 'add';
+
+    let itemsToSave = [];
+    if (isEdit) {
+        itemsToSave = editPurchaseItems.map(i => ({ product_id: i.product_id, qty: i.quantity, price: i.price, total: i.quantity * i.price }));
+    } else {
+        document.querySelectorAll(`.${prefix}-purchase-item`).forEach(row => {
+            const product_id = row.querySelector('.item-product').value;
+            const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
+            const price = parseFloat(row.querySelector('.item-price').value) || 0;
+            if (product_id && qty > 0) {
+                itemsToSave.push({ product_id, qty, price, total: qty * price });
+            }
+        });
+    }
+
+    if (itemsToSave.length === 0) {
+        showToast('Tambahkan minimal satu item produk!', 'warning');
+        return;
+    }
+
+    const total = itemsToSave.reduce((s, i) => s + i.total, 0);
+
+    const payload = {
+        vendor_id: document.getElementById(`${prefix}-purchase-vendor`)?.value || '',
+        date: document.getElementById(`${prefix}-purchase-date`)?.value || '',
+        total: total,
+        paid: parseFloat(document.getElementById(`${prefix}-purchase-paid`)?.value || 0),
+        payment_type_id: document.getElementById(`${prefix}-purchase-payment-type`)?.value || '',
+        items: itemsToSave
+    };
+
+    const url = isEdit ? `/api/purchases/${id}` : '/api/purchases';
+    const method = isEdit ? 'PUT' : 'POST';
+
+    try {
+        const res = await fetch(url, {
+            method,
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            closeModal(`modal-${isEdit ? 'edit' : 'add'}-purchase`);
+            showToast(isEdit ? 'Purchase Order berhasil diperbarui!' : 'Purchase Order berhasil dibuat!', 'success');
+            await fetchPurchases();
+            await fetchProducts(); // update stock
+            renderHutang();
+        } else {
+            const err = await res.json();
+            showToast('Error: ' + (err.error || 'Gagal menyimpan PO'), 'error');
+        }
+    } catch (err) {
+        console.error(err);
+        showToast('Gagal menghubungi server', 'error');
+    }
+}
+
+// ==========================================================================
+// INVOICES — CRUD
+// ==========================================================================
+
+async function fetchInvoices() {
+    try {
+        // FIX: correct endpoint is /api/invoices not /api/sales
+        const res = await fetch('/api/invoices', { headers: getAuthHeaders() });
+        const data = await res.json();
+        INVOICES = data;
+        renderInvoices();
+        renderPiutang();
+        renderSummaryCards();
+        renderRecentTransactions();
+    } catch (err) {
+        console.error('Failed to fetch invoices', err);
+    }
+}
+
+let editInvoiceItems = [];
+
+function renderEditInvoiceItems() {
+    const container = document.getElementById('edit-invoice-items-container');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    let subtotal = 0;
+    
+    editInvoiceItems.forEach((item, index) => {
+        const product = PRODUCTS.find(p => p.id === item.product_id) || { name: item.product_id, unit: 'pcs' };
+        const itemTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.price) || 0);
+        subtotal += itemTotal;
+        
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="padding: 0.5rem;">
+                <div style="font-weight: 500; color: var(--gray-900);">${product.name}</div>
+            </td>
+            <td style="padding: 0.5rem; text-align: center;">
+                <input type="number" min="1" value="${item.quantity}" onchange="updateEditInvoiceItemQty(${index}, this.value)" style="width: 60px; padding: 0.25rem; border: 1px solid var(--gray-200); border-radius: 0.25rem; text-align: center;">
+            </td>
+            <td style="padding: 0.5rem; text-align: right;">
+                <div style="display:flex; align-items:center; justify-content:flex-end; gap:0.25rem;">
+                    <span style="font-size:0.75rem; color:var(--gray-500);">Rp</span>
+                    <input type="number" value="${item.price}" onchange="updateEditInvoiceItemPrice(${index}, this.value)" style="width: 80px; padding: 0.25rem; border: 1px solid var(--gray-200); border-radius: 0.25rem; text-align: right;">
+                </div>
+            </td>
+            <td style="padding: 0.5rem; text-align: right; font-weight: 600; color: var(--gray-900);">
+                ${rp(itemTotal)}
+            </td>
+            <td style="padding: 0.5rem; text-align: center;">
+                <button type="button" onclick="removeEditInvoiceItem(${index})" style="color: var(--rose-500); background: none; border: none; cursor: pointer; padding: 0.25rem;">
+                    <i data-lucide="trash-2" style="width: 16px; height: 16px;"></i>
+                </button>
+            </td>
+        `;
+        container.appendChild(tr);
+    });
+    
+    if (editInvoiceItems.length === 0) {
+        container.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 1rem; color: var(--gray-500);">Belum ada item.</td></tr>`;
+    }
+    
+    const ppn = subtotal * 0.11;
+    const grandTotal = subtotal + ppn;
+    
+    document.getElementById('edit-invoice-subtotal').textContent = rp(subtotal);
+    document.getElementById('edit-invoice-ppn').textContent = rp(ppn);
+    document.getElementById('edit-invoice-total').textContent = rp(grandTotal);
+    
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+window.addEditInvoiceItem = () => {
+    const select = document.getElementById('edit-invoice-product-select');
+    if (!select || !select.value) return;
+    
+    const prod = PRODUCTS.find(p => p.id === select.value);
+    if (!prod) return;
+    
+    const existing = editInvoiceItems.find(i => i.product_id === prod.id);
+    if (existing) {
+        existing.quantity += 1;
+    } else {
+        editInvoiceItems.push({
+            product_id: prod.id,
+            quantity: 1,
+            price: prod.price
+        });
+    }
+    renderEditInvoiceItems();
+};
+
+window.removeEditInvoiceItem = (index) => {
+    editInvoiceItems.splice(index, 1);
+    renderEditInvoiceItems();
+};
+
+window.updateEditInvoiceItemQty = (index, val) => {
+    const qty = parseInt(val);
+    if (qty > 0) {
+        editInvoiceItems[index].quantity = qty;
+    } else {
+        editInvoiceItems[index].quantity = 1;
+    }
+    renderEditInvoiceItems();
+};
+
+window.updateEditInvoiceItemPrice = (index, val) => {
+    const price = parseFloat(val);
+    if (price >= 0) {
+        editInvoiceItems[index].price = price;
+    }
+    renderEditInvoiceItems();
+};
+
+async function openEditInvoiceModal(id) {
+    const inv = INVOICES.find(x => x.id === id);
+    if (!inv) return;
+    
+    document.getElementById('edit-invoice-id').value = inv.id;
+    document.getElementById('edit-invoice-number-display').value = inv.id;
+    document.getElementById('edit-invoice-date').value = inv.date || '';
+    document.getElementById('edit-invoice-customer-display').value = inv.customer || '';
+    
+    const statusEl = document.getElementById('edit-invoice-status');
+    if (statusEl) {
+        const statusLower = (inv.status || '').toLowerCase();
+        statusEl.value = statusLower === 'lunas' ? 'lunas' : (statusLower === 'sebagian' ? 'sebagian' : 'belum');
+    }
+    
+    // Populate product select
+    const select = document.getElementById('edit-invoice-product-select');
+    if (select) {
+        select.innerHTML = '<option value="" disabled selected>- Pilih Produk -</option>' + 
+            PRODUCTS.map(p => `<option value="${p.id}">${p.name} (${rp(p.price)})</option>`).join('');
+    }
+    
+    const container = document.getElementById('edit-invoice-items-container');
+    if (container) container.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 1rem; color: var(--gray-400);">Memuat data item...</td></tr>';
+    
+    try {
+        const res = await fetch(`/api/invoices/${id}/items`, { headers: getAuthHeaders() });
+        if (res.ok) {
+            editInvoiceItems = await res.json();
+            renderEditInvoiceItems();
+        }
+    } catch (err) {
+        console.error('Failed to load invoice items', err);
+        if (container) container.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 1rem; color: var(--rose-500);">Gagal memuat data item</td></tr>';
+    }
+    
+    openModal('modal-edit-invoice');
+}
+
+async function saveInvoiceEdits() {
+    const id = document.getElementById('edit-invoice-id').value;
+    if (!id) return;
+    
+    const date = document.getElementById('edit-invoice-date').value;
+    const status = document.getElementById('edit-invoice-status').value;
+    
+    const inv = INVOICES.find(x => x.id === id);
+    const customer_id = inv ? inv.customerId : null;
+    
+    const subtotal = editInvoiceItems.reduce((s, i) => s + (parseFloat(i.price) * parseInt(i.quantity)), 0);
+    const total = subtotal * 1.11; // including 11% tax
+    
+    // Determine paid amount based on old paid amount. If it was fully paid, should we adjust paid amount?
+    // Let's assume paid_amount stays the same unless it exceeds new total.
+    let paid_amount = inv ? inv.paid : 0;
+    if (status === 'lunas') {
+        paid_amount = total;
+    } else if (status === 'belum') {
+        paid_amount = 0;
+    } else {
+        if (paid_amount > total) paid_amount = total;
+    }
+    
+    try {
+        const res = await fetch(`/api/invoices/${id}`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ 
+                date, 
+                status, 
+                customer_id, 
+                total, 
+                paid_amount, 
+                payment_type_id: inv ? inv.paymentTypeId : 'PT-1',
+                items: editInvoiceItems
+            })
+        });
+        if (res.ok) {
+            closeModal('modal-edit-invoice');
+            showToast('Invoice berhasil diperbarui!', 'success');
+            await fetchInvoices();
+            await fetchProducts(); // stock changed
+        } else {
+            const err = await res.json();
+            showToast('Error: ' + (err.error || 'Gagal menyimpan invoice'), 'error');
+        }
+    } catch (err) {
+        console.error(err);
+        showToast('Gagal menghubungi server', 'error');
+    }
+}
+
+let cancelInvoiceId = null;
+
+async function cancelInvoice(id) {
+    cancelInvoiceId = id;
+    openModal('modal-cancel-invoice');
+}
+
+async function confirmCancelInvoice() {
+    const id = cancelInvoiceId || document.getElementById('edit-invoice-id')?.value;
+    if (!id) return;
+    try {
+        const res = await fetch(`/api/invoices/${id}/cancel`, {
+            method: 'PUT',
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            closeModal('modal-cancel-invoice');
+            closeModal('modal-edit-invoice');
+            showToast('Invoice berhasil dibatalkan. Stok telah dikembalikan.', 'success');
+            await fetchInvoices();
+            await fetchProducts();
+            renderPOSProducts();
+        } else {
+            const err = await res.json();
+            showToast('Gagal: ' + (err.error || 'Terjadi kesalahan'), 'error');
+        }
+    } catch (err) {
+        console.error(err);
+        showToast('Gagal menghubungi server', 'error');
+    }
+    cancelInvoiceId = null;
+}
+
+let cancelPurchaseId = null;
+
+async function confirmCancelPurchase() {
+    const id = cancelPurchaseId || document.getElementById('edit-purchase-id')?.value;
+    if (!id) return;
+    try {
+        const res = await fetch(`/api/purchases/${id}/cancel`, {
+            method: 'PUT',
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            closeModal('modal-cancel-purchase');
+            closeModal('modal-edit-purchase');
+            showToast('PO berhasil dibatalkan. Stok telah dikembalikan.', 'success');
+            await fetchPurchases();
+            await fetchProducts();
+        } else {
+            const err = await res.json();
+            showToast('Gagal: ' + (err.error || 'Terjadi kesalahan'), 'error');
+        }
+    } catch (err) {
+        console.error(err);
+        showToast('Gagal menghubungi server', 'error');
+    }
+    cancelPurchaseId = null;
+}
+
+window.cancelPurchase = (id) => {
+    cancelPurchaseId = id;
+    document.getElementById('modal-cancel-purchase').querySelector('strong').textContent = id;
+    openModal('modal-cancel-purchase');
+};// ==========================================================================
+// CASH FLOW — CRUD
+// ==========================================================================
+
+async function fetchCashTransactions() {
+    try {
+        const res = await fetch('/api/finance/cash-flow', { headers: getAuthHeaders() });
+        const data = await res.json();
+        CASH_TRANSACTIONS = data;
+        renderCashFlow();
+    } catch (err) {
+        console.error('Failed to fetch cash flow', err);
+    }
+}
+
+async function saveCashTransaction() {
+    const payload = {
+        type: document.getElementById('add-cash-type').value,
+        category: document.getElementById('add-cash-category').value,
+        amount: document.getElementById('add-cash-amount').value,
+        notes: document.getElementById('add-cash-notes').value,
+        date: document.getElementById('add-cash-date').value
+    };
+
+    try {
+        const res = await fetch('/api/finance/cash-flow', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            closeModal('modal-add-cash');
+            fetchCashTransactions();
+            fetchInvoices(); // if it affects unpaid
+            fetchPurchases();
+        } else {
+            const err = await res.json();
+            alert('Error: ' + err.error);
+        }
+    } catch (err) {
+        console.error(err);
+        alert('Gagal menyimpan transaksi kas');
+    }
+}
+
+// FIX: helper to open hutang payment modal with correct PO id pre-filled
+function openHutangPaymentModal(poId, sisa) {
+    const typeEl = document.getElementById('payment-type');
+    const refEl  = document.getElementById('payment-ref-id');
+    const amtEl  = document.getElementById('payment-amount');
+    if (typeEl) typeEl.value  = 'payable';
+    if (refEl)  refEl.value  = poId;
+    if (amtEl)  amtEl.value  = sisa || '';
+    openModal('modal-payment');
+}
+
+// FIX: helper to open piutang payment modal with correct invoice id pre-filled
+function openPiutangPaymentModal(invoiceId, sisa) {
+    const typeEl = document.getElementById('payment-type');
+    const refEl  = document.getElementById('payment-ref-id');
+    const amtEl  = document.getElementById('payment-amount');
+    if (typeEl) typeEl.value  = 'receivable';
+    if (refEl)  refEl.value  = invoiceId;
+    if (amtEl)  amtEl.value  = sisa || '';
+    openModal('modal-payment');
+}
+
+async function submitPayment() {
+    const typeEl   = document.getElementById('payment-type');
+    const isReceivable = typeEl ? typeEl.value === 'receivable' : false;
+    const id       = document.getElementById('payment-ref-id').value;
+    const amount   = document.getElementById('payment-amount').value;
+    const methodEl = document.getElementById('payment-method');
+    const method   = methodEl ? methodEl.value : 'Transfer Bank';
+
+    if (!id || !amount || parseFloat(amount) <= 0) {
+        showToast('ID dan jumlah pembayaran wajib diisi!', 'warning');
+        return;
+    }
+
+    // FIX: use correct endpoints
+    const url = isReceivable
+        ? `/api/finance/receivables/${id}/pay`
+        : `/api/finance/payables/${id}/pay`;
+
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ amount: parseFloat(amount), payment_method: method })
+        });
+        if (res.ok) {
+            closeModal('modal-payment');
+            showToast('Pembayaran berhasil dicatat!', 'success');
+            if (isReceivable) {
+                await fetchInvoices();
+                renderPiutang();
+            } else {
+                await fetchPurchases();
+                renderHutang();
+            }
+            await fetchCashTransactions();
+        } else {
+            const err = await res.json();
+            showToast('Error: ' + (err.error || 'Gagal memproses pembayaran'), 'error');
+        }
+    } catch (err) {
+        console.error(err);
+        showToast('Gagal menghubungi server', 'error');
+    }
+}
+
+// ==========================================================================
+// USERS — CRUD
+// ==========================================================================
+
+async function fetchUsers() {
+    try {
+        const res = await fetch('/api/users', { headers: getAuthHeaders() });
+        const data = await res.json();
+        USERS = data;
+        renderUsers();
+    } catch (err) {
+        console.error('Failed to fetch users', err);
+    }
+}
+
+function renderUsers() {
+    const tbody = document.getElementById('users-body');
+    if (!tbody) return;
+    
+    tbody.innerHTML = USERS.map(u => `
+        <tr>
+            <td style="font-weight: 600;">${u.username}</td>
+            <td>${u.name}</td>
+            <td><span class="badge-status pending">${u.role}</span></td>
+            <td><span class="badge-status ${u.active ? 'lunas' : 'batal'}">${u.active ? 'Aktif' : 'Nonaktif'}</span></td>
+            <td>
+                <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;" onclick="openEditStaffModal('${u.id}')"><i data-lucide="edit-2" style="width:14px;height:14px;margin:0;"></i></button>
+                <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color:var(--rose-600);" onclick="deleteStaff('${u.id}')"><i data-lucide="trash-2" style="width:14px;height:14px;margin:0;"></i></button>
+            </td>
+        </tr>
+    `).join('');
+    
+    if (window.lucide) lucide.createIcons();
+}
+
+function openEditStaffModal(id) {
+    const u = USERS.find(x => x.id == id);
+    if (!u) return;
+    document.getElementById('modal-add-staff').querySelector('h3').textContent = 'Edit Staff';
+    document.getElementById('staff-id').value = u.id;
+    document.getElementById('staff-name').value = u.name;
+    document.getElementById('staff-username').value = u.username;
+    document.getElementById('staff-username').disabled = true;
+    document.getElementById('staff-password').value = ''; // Leave empty if no change
+    document.getElementById('staff-email').value = u.email || '';
+    document.getElementById('staff-role').value = u.role;
+    document.getElementById('staff-status').value = u.active ? 'true' : 'false';
+    openModal('modal-add-staff');
+}
+
+function openAddStaffModal() {
+    document.getElementById('modal-add-staff').querySelector('h3').textContent = 'Tambah Staff';
+    document.getElementById('staff-id').value = '';
+    document.getElementById('staff-name').value = '';
+    document.getElementById('staff-username').value = '';
+    document.getElementById('staff-username').disabled = false;
+    document.getElementById('staff-password').value = '';
+    document.getElementById('staff-email').value = '';
+    document.getElementById('staff-role').value = 'kasir';
+    document.getElementById('staff-status').value = 'true';
+    openModal('modal-add-staff');
+}
+
+async function saveStaff() {
+    const id = document.getElementById('staff-id').value;
+    const isEdit = !!id;
+    
+    const payload = {
+        name: document.getElementById('staff-name').value,
+        username: document.getElementById('staff-username').value,
+        password: document.getElementById('staff-password').value,
+        email: document.getElementById('staff-email').value,
+        role: document.getElementById('staff-role').value,
+        active: document.getElementById('staff-status').value === 'true'
+    };
+
+    const url = isEdit ? `/api/users/${id}` : '/api/users';
+    const method = isEdit ? 'PUT' : 'POST';
+
+    try {
+        const res = await fetch(url, {
+            method,
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            closeModal('modal-add-staff');
+            fetchUsers();
+        } else {
+            const err = await res.json();
+            alert('Error: ' + err.error);
+        }
+    } catch (err) {
+        console.error(err);
+        alert('Gagal menyimpan staff');
+    }
+}
+
+async function deleteStaff(id) {
+    if (!confirm('Yakin ingin menghapus staff ini?')) return;
+    try {
+        const res = await fetch(`/api/users/${id}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+        if (res.ok) {
+            fetchUsers();
+        } else {
+            const err = await res.json();
+            alert('Gagal menghapus: ' + err.error);
+        }
+    } catch (err) {
+        console.error(err);
+    }
+}
+
 // Run on DOM ready
 document.addEventListener('DOMContentLoaded', init);
+
+async function populateMasterDropdowns() {
+    try {
+        const fetchAndFill = async (endpoint, selectIds, valueField = 'id', labelField = 'name') => {
+            const res = await fetch(endpoint, { headers: getAuthHeaders() });
+            const data = await res.json();
+            const optionsHtml = data.map(item => `<option value="${item[valueField]}">${item[labelField]}</option>`).join('');
+            selectIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = optionsHtml;
+            });
+        };
+
+        await fetchAndFill('/api/master/product-categories', ['add-product-category', 'edit-product-category'], 'id', 'name');
+        await fetchAndFill('/api/master/product-units', ['add-product-unit', 'edit-product-unit'], 'id', 'name');
+        await fetchAndFill('/api/master/vendor-categories', ['add-vendor-category', 'edit-vendor-category'], 'id', 'name');
+        await fetchAndFill('/api/master/payment-types', ['cart-payment-type', 'add-purchase-payment-type', 'edit-purchase-payment-type', 'payment-method'], 'id', 'name');
+    } catch (err) {
+        console.error('Failed to populate master dropdowns', err);
+    }
+}
 
 // ==========================================================================
 // MASTER DATA — CRUD
