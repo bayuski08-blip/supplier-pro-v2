@@ -843,7 +843,7 @@ function renderCashFlow(filter = '') {
 
     tbody.innerHTML = filtered.map(t => {
         const isCancelled = t.status === 'cancelled';
-        const isManual = t.isManual;
+        const isManual = t.isManual && t.category !== 'Penyesuaian Stok';
         const rowStyle = isCancelled ? 'opacity:0.55; text-decoration: line-through;' : '';
 
         const actionBtns = isCancelled ? `<span class="badge-status batal" style="font-size:0.7rem;">Dibatalkan</span>` : `

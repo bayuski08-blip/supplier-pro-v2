@@ -399,7 +399,7 @@ app.post('/api/stock-adjust', authenticateToken, async (req, res) => {
 
     const ctId = 'SA-' + Date.now();
     const ctDate = new Date().toISOString().split('T')[0];
-    const desc = `Stock Opname: ${productName} | Sebelum: ${oldStock} → Sesudah: ${newStock} | ${keterangan}${note ? ' | ' + note : ''}`;
+    const desc = `Stock Opname: [${product_id}] ${productName} | Sebelum: ${oldStock} → Sesudah: ${newStock} | ${keterangan}${note ? ' | ' + note : ''}`;
 
     await client.query(
       'INSERT INTO cash_transactions (id, date, type, category, description, amount, method) VALUES ($1, $2, $3, $4, $5, $6, $7)',
@@ -739,6 +739,29 @@ app.patch('/api/finance/cash-flow/:id/cancel', authenticateToken, async (req, re
         const newPaid = Math.max(0, parseFloat(po.paid_amount) - parseFloat(tx.amount));
         const newStatus = newPaid >= parseFloat(po.total) ? 'Selesai' : 'Dalam Proses';
         await client.query('UPDATE purchase_orders SET paid_amount=$1, status=$2 WHERE id=$3', [newPaid, newStatus, tx.purchase_order_id]);
+      }
+    } else if (tx.category === 'Penyesuaian Stok') {
+      // Reversal for stock opname
+      const match = tx.description.match(/Stock Opname: (.*?) \| Sebelum: (\d+) → Sesudah: (\d+)/);
+      if (match) {
+        let productName = match[1].trim();
+        let productId = null;
+        const idMatch = productName.match(/^\[(.*?)\]\s+(.*)/);
+        if (idMatch) {
+          productId = idMatch[1];
+          productName = idMatch[2];
+        }
+
+        const oldStock = parseInt(match[2]);
+        const newStock = parseInt(match[3]);
+        const diff = newStock - oldStock; // Positive if stock increased, negative if decreased
+
+        // Reverse the diff: subtract it from the current stock
+        if (productId) {
+          await client.query('UPDATE products SET stock = stock - $1 WHERE id = $2', [diff, productId]);
+        } else {
+          await client.query('UPDATE products SET stock = stock - $1 WHERE name = $2', [diff, productName]);
+        }
       }
     }
 
