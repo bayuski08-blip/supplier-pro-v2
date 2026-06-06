@@ -87,3 +87,12 @@ VALUES
   ('CT004', '2026-06-01', 'IN', 'Penjualan', 'Pembayaran tunai Warung Sari Rasa', 1250000, 'Tunai', 'INV-2026-0038', NULL, 'PT-1', 1),
   ('CT005', '2026-06-01', 'OUT', 'Operasional', 'Listrik & air gudang', 2500000, 'Transfer Bank', NULL, NULL, NULL, 1)
 ON CONFLICT (id) DO NOTHING;
+
+-- Seed default prefix settings
+INSERT INTO settings (key, value) VALUES
+  ('prefix_customer', 'C'),
+  ('prefix_vendor', 'V'),
+  ('prefix_purchase', 'PO/{YYYY}/{MM}/'),
+  ('prefix_sales', 'INV/{YYYY}/{MM}/')
+ON CONFLICT (key) DO NOTHING;
+

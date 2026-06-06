@@ -18,6 +18,68 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://postgres:T34m1tb4l1@localhost:5432/supplierpro'
 });
 
+// Initialize settings table and seed defaults
+pool.query(`
+  CREATE TABLE IF NOT EXISTS settings (
+    key VARCHAR(255) PRIMARY KEY,
+    value TEXT
+  );
+`).then(() => {
+  pool.query(`
+    INSERT INTO settings (key, value) VALUES
+    ('prefix_customer', 'C'),
+    ('prefix_vendor', 'V'),
+    ('prefix_purchase', 'PO/{YYYY}/{MM}/'),
+    ('prefix_sales', 'INV/{YYYY}/{MM}/')
+    ON CONFLICT (key) DO NOTHING;
+  `);
+}).catch(err => console.error('Error initializing settings table on startup:', err));
+
+// Settings & Prefix Helpers
+async function getSetting(key, defaultValue) {
+  try {
+    const res = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
+    if (res.rows.length > 0) {
+      return res.rows[0].value;
+    }
+  } catch (err) {
+    console.error(`getSetting error for key ${key}:`, err);
+  }
+  return defaultValue;
+}
+
+async function generateNextId(clientOrPool, tableName, prefixSetting) {
+  const now = new Date();
+  const yyyy = now.getFullYear().toString();
+  const yy = yyyy.slice(-2);
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  
+  let resolvedPrefix = prefixSetting || '';
+  resolvedPrefix = resolvedPrefix
+    .replace(/{YYYY}/g, yyyy)
+    .replace(/{YY}/g, yy)
+    .replace(/{MM}/g, mm);
+    
+  const query = `SELECT id FROM ${tableName} WHERE id LIKE $1`;
+  const result = await clientOrPool.query(query, [resolvedPrefix + '%']);
+  
+  let maxNum = 0;
+  for (const row of result.rows) {
+    const idStr = row.id;
+    if (idStr.startsWith(resolvedPrefix)) {
+      const suffix = idStr.substring(resolvedPrefix.length);
+      const num = parseInt(suffix, 10);
+      if (!isNaN(num) && num > maxNum) {
+        maxNum = num;
+      }
+    }
+  }
+  
+  const nextNum = maxNum + 1;
+  const padded = String(nextNum).padStart(4, '0');
+  return resolvedPrefix + padded;
+}
+
 // Authentication Middleware
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -147,6 +209,41 @@ app.delete('/api/master/:type/:id', authenticateToken, async (req, res) => {
     } else {
       res.status(400).json({ error: err.message });
     }
+  }
+});
+
+// --- Settings Routes ---
+app.get('/api/settings', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM settings');
+    const settingsMap = {};
+    result.rows.forEach(r => {
+      settingsMap[r.key] = r.value;
+    });
+    res.json(settingsMap);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/settings', authenticateToken, async (req, res) => {
+  const settings = req.body;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const [key, value] of Object.entries(settings)) {
+      await client.query(
+        'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2',
+        [key, String(value)]
+      );
+    }
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(400).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -339,7 +436,9 @@ app.post('/api/customers', authenticateToken, async (req, res) => {
   const { name, customer_category_id, phone, city, address, credit_lmt, id_number, npwp } = req.body;
   const insertQuery = 'INSERT INTO customers (id, name, customer_category_id, phone, city, address, credit_lmt, id_number, npwp) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)';
   try {
-    await pool.query(insertQuery, ['C' + Date.now(), name, customer_category_id, phone, city, address, credit_lmt, id_number, npwp]);
+    const prefix = await getSetting('prefix_customer', 'C');
+    const id = await generateNextId(pool, 'customers', prefix);
+    await pool.query(insertQuery, [id, name, customer_category_id, phone, city, address, credit_lmt, id_number, npwp]);
     res.json({ success: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -442,13 +541,14 @@ app.post('/api/invoices', authenticateToken, async (req, res) => {
   const insertInvoiceQuery = 'INSERT INTO sales_invoices (id, date, customer_id, total, paid_amount, payment_type_id, due_date, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)';
   const updateStockQuery = 'UPDATE products SET stock = stock - $1 WHERE id = $2';
   
-  const id = 'INV-' + Date.now();
   const date = new Date().toISOString();
   const status = paid >= total ? 'Lunas' : (paid > 0 ? 'Sebagian' : 'Belum Bayar');
   
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const prefix = await getSetting('prefix_sales', 'INV/{YYYY}/{MM}/');
+    const id = await generateNextId(client, 'sales_invoices', prefix);
     await client.query(insertInvoiceQuery, [id, date, customer_id, total, paid, payment_type_id, due_date, status]);
     
     // Reduce stock
@@ -594,9 +694,10 @@ app.post('/api/finance/payables/:id/pay', authenticateToken, async (req, res) =>
 // --- Vendors Routes Extra CRUD ---
 app.post('/api/vendors', authenticateToken, async (req, res) => {
   const { name, vendor_category_id, category_id, phone, city, address, id_number, npwp, nama_bank, nomor_rek, pemilik_rek } = req.body;
-  const vId = 'V' + Date.now();
   const catId = vendor_category_id || category_id || 'VC-1';
   try {
+    const prefix = await getSetting('prefix_vendor', 'V');
+    const vId = await generateNextId(pool, 'vendors', prefix);
     await pool.query(
       'INSERT INTO vendors (id, name, vendor_category_id, phone, city, address, id_number, npwp, nama_bank, nomor_rek, pemilik_rek) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
       [vId, name, catId, phone, city, address, id_number, npwp, nama_bank, nomor_rek, pemilik_rek]
@@ -652,7 +753,9 @@ app.get('/api/purchases', authenticateToken, async (req, res) => {
       total: parseFloat(row.total),
       paid: parseFloat(row.paid_amount),
       type: row.payment_type || 'Tunai',
-      status: row.status
+      status: row.status,
+      paymentTypeId: row.payment_type_id,
+      dueDate: row.due_date ? row.due_date.split('T')[0] : ''
     })));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -666,12 +769,13 @@ app.post('/api/purchases', authenticateToken, async (req, res) => {
   const finalPaid = parseFloat(paid || paid_amount || 0);
   const finalTotal = parseFloat(total || 0);
   const status = finalPaid >= finalTotal ? 'Selesai' : 'Dalam Proses';
-  const poId = 'PO-' + Date.now();
   const poDate = date || new Date().toISOString().split('T')[0];
   
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const prefix = await getSetting('prefix_purchase', 'PO/{YYYY}/{MM}/');
+    const poId = await generateNextId(client, 'purchase_orders', prefix);
     await client.query('INSERT INTO purchase_orders (id, date, vendor_id, total, paid_amount, payment_type_id, due_date, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [poId, poDate, vId, finalTotal, finalPaid, pType, due_date, status]);
     
     if (items && Array.isArray(items)) {

@@ -143,3 +143,9 @@ CREATE TABLE IF NOT EXISTS cash_transactions (
   payment_type_id VARCHAR(255) REFERENCES payment_types(id) ON DELETE SET NULL,
   user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
 );
+
+CREATE TABLE IF NOT EXISTS settings (
+  key VARCHAR(255) PRIMARY KEY,
+  value TEXT
+);
+

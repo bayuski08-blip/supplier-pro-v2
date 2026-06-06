@@ -658,7 +658,9 @@ function renderInvoices(filter = '') {
         );
     }
 
-    tbody.innerHTML = filtered.map(inv => `
+    tbody.innerHTML = filtered.map(inv => {
+        const statusLower = (inv.status || '').toLowerCase();
+        return `
         <tr>
             <td style="font-weight:600; color: var(--blue-600);">${inv.id}</td>
             <td>${inv.date}</td>
@@ -666,7 +668,7 @@ function renderInvoices(filter = '') {
             <td style="font-weight:700;">${rp(inv.total)}</td>
             <td>${rp(inv.paid)}</td>
             <td>${inv.type}</td>
-            <td><span class="badge-status ${inv.status.toLowerCase()}">${capitalize(inv.status)}</span></td>
+            <td><span class="badge-status ${statusLower}">${capitalize(inv.status || 'belum')}</span></td>
             <td style="text-align: right; white-space: nowrap;">
                 <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;" title="Print Preview" onclick="openModal('modal-print-invoice')">
                     <i data-lucide="printer" style="width: 14px; height: 14px; margin: 0;"></i>
@@ -674,13 +676,13 @@ function renderInvoices(filter = '') {
                 <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;" title="Edit Invoice" onclick="openEditInvoiceModal('${inv.id}')">
                     <i data-lucide="edit-2" style="width: 14px; height: 14px; margin: 0;"></i>
                 </button>
-                ${inv.status.toLowerCase() !== 'batal' ? `<button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem; color: var(--rose-500);" title="Batalkan Invoice" onclick="cancelInvoice('${inv.id}')">
+                ${statusLower !== 'batal' ? `<button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem; color: var(--rose-500);" title="Batalkan Invoice" onclick="cancelInvoice('${inv.id}')">
                     <i data-lucide="x-circle" style="width: 14px; height: 14px; margin: 0;"></i>
                 </button>` : ''}
-                ${inv.status.toLowerCase() !== 'lunas' && inv.status.toLowerCase() !== 'batal' ? `<button class="btn-toolbar primary" style="padding:0.25rem 0.5rem; font-size:0.75rem;" onclick="openPiutangPaymentModal('${inv.id}', ${inv.total - inv.paid})">Bayar</button>` : ''}
+                ${statusLower !== 'lunas' && statusLower !== 'batal' ? `<button class="btn-toolbar primary" style="padding:0.25rem 0.5rem; font-size:0.75rem;" onclick="openPiutangPaymentModal('${inv.id}', ${inv.total - inv.paid})">Bayar</button>` : ''}
             </td>
         </tr>
-    `).join('');
+    `}).join('');
     
     if (typeof lucide !== 'undefined') lucide.createIcons();
 }
@@ -1151,11 +1153,14 @@ document.getElementById('btn-checkout')?.addEventListener('click', async () => {
     
     const paymentTypeSelect = document.getElementById('cart-payment-type');
     const payment_type_id = paymentTypeSelect ? paymentTypeSelect.value : 'PT-1';
-    // Let's deduce payTypeStr from payment_type_id to know if it's DP or Tempo
-    // In our DB: PT-1: Tunai, PT-2: Tempo, PT-3: DP
+    const payTypeName = getPaymentTypeName(paymentTypeSelect).toLowerCase();
+    // Let's deduce payTypeStr from payment_type_id or payTypeName to know if it's DP or Tempo/Credit
     let payTypeStr = 'tunai';
-    if (payment_type_id === 'PT-2') payTypeStr = 'tempo';
-    else if (payment_type_id === 'PT-3') payTypeStr = 'dp';
+    if (payment_type_id === 'PT-2' || payTypeName.includes('tempo') || payTypeName.includes('credit')) {
+        payTypeStr = 'tempo';
+    } else if (payment_type_id === 'PT-3' || payTypeName.includes('dp')) {
+        payTypeStr = 'dp';
+    }
     
     const subtotal = cart.reduce((s, c) => s + c.price * c.qty, 0);
     const ppnAmount = subtotal * (currentPpnRate / 100);
@@ -1380,7 +1385,8 @@ async function init() {
         fetchPurchases(),
         fetchInvoices(),
         fetchCashTransactions(),
-        fetchUsers()
+        fetchUsers(),
+        loadPrefixSettings()
     ]);
 
     // Re-render dashboard with real DB data
@@ -1397,6 +1403,10 @@ async function init() {
 
     const btnAddPoItem = document.getElementById('btn-add-purchase-item');
     if (btnAddPoItem) btnAddPoItem.addEventListener('click', () => { if (window.addAddPurchaseItem) window.addAddPurchaseItem(); });
+
+    // Recalculate PO due date when date inputs change
+    document.getElementById('add-purchase-date')?.addEventListener('change', () => onPurchasePaymentTypeChange('add'));
+    document.getElementById('edit-purchase-date')?.addEventListener('change', () => onPurchasePaymentTypeChange('edit'));
     
     // Edit item button is dynamically added with onclick in HTML, so we don't need to bind it here unless missing
 
@@ -1919,7 +1929,8 @@ function renderEditPurchaseItems() {
     
     editPurchaseItems.forEach((item, index) => {
         const product = PRODUCTS.find(p => p.id === item.product_id) || { name: item.product_id, unit: 'pcs' };
-        const itemTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.price) || 0);
+        const itemPrice = parseFloat(item.price ?? item.cost ?? 0);
+        const itemTotal = (parseFloat(item.quantity) || 0) * itemPrice;
         subtotal += itemTotal;
         
         const tr = document.createElement('tr');
@@ -1933,7 +1944,7 @@ function renderEditPurchaseItems() {
             <td style="padding: 0.5rem; text-align: right;">
                 <div style="display:flex; align-items:center; justify-content:flex-end; gap:0.25rem;">
                     <span style="font-size:0.75rem; color:var(--gray-500);">Rp</span>
-                    <input type="number" value="${item.price}" onchange="updateEditPurchaseItemPrice(${index}, this.value)" style="width: 80px; padding: 0.25rem; border: 1px solid var(--gray-200); border-radius: 0.25rem; text-align: right;">
+                    <input type="number" value="${itemPrice}" onchange="updateEditPurchaseItemPrice(${index}, this.value)" style="width: 80px; padding: 0.25rem; border: 1px solid var(--gray-200); border-radius: 0.25rem; text-align: right;">
                 </div>
             </td>
             <td style="padding: 0.5rem; text-align: right; font-weight: 600; color: var(--gray-900);">
@@ -2013,10 +2024,19 @@ async function openEditPurchaseModal(id) {
     const ptEl     = document.getElementById('edit-purchase-payment-type');
 
     if (idEl)     idEl.value     = po.id;
+    const numDisplay = document.getElementById('edit-purchase-number-display');
+    if (numDisplay) numDisplay.value = po.id;
     if (vendorEl) vendorEl.value = po.vendorId || '';
     if (dateEl)   dateEl.value   = (po.date || '').split('T')[0];
     if (paidEl)   paidEl.value   = po.paid || '';
     if (ptEl)     ptEl.value     = po.paymentTypeId || '';
+    const statusEl = document.getElementById('edit-purchase-status');
+    if (statusEl) statusEl.value = po.status || 'Dalam Proses';
+    const dueDateEl = document.getElementById('edit-purchase-due-date');
+    if (dueDateEl) dueDateEl.value = po.dueDate || '';
+
+    // Adjust due date picker visibility
+    onPurchasePaymentTypeChange('edit');
 
     // Populate product select
     const select = document.getElementById('edit-purchase-product-select');
@@ -2048,7 +2068,7 @@ async function savePurchase(isEdit) {
 
     let itemsToSave = [];
     if (isEdit) {
-        itemsToSave = editPurchaseItems.map(i => ({ product_id: i.product_id, qty: i.quantity, price: i.price, total: i.quantity * i.price }));
+        itemsToSave = editPurchaseItems.map(i => ({ product_id: i.product_id, qty: i.quantity, price: i.price ?? i.cost ?? 0, total: i.quantity * (i.price ?? i.cost ?? 0) }));
     } else {
         itemsToSave = addPurchaseItems.map(i => ({ product_id: i.product_id, qty: i.quantity, price: i.price, total: i.quantity * i.price }));
     }
@@ -2372,6 +2392,13 @@ window.cancelPurchase = (id) => {
     cancelPurchaseId = id;
     document.getElementById('modal-cancel-purchase').querySelector('strong').textContent = id;
     openModal('modal-cancel-purchase');
+};
+
+window.cancelPurchaseFromEdit = () => {
+    const id = document.getElementById('edit-purchase-id')?.value;
+    if (id) {
+        window.cancelPurchase(id);
+    }
 };// ==========================================================================
 // CASH FLOW — CRUD
 // ==========================================================================
@@ -2797,4 +2824,62 @@ document.addEventListener('DOMContentLoaded', () => {
             fetchMasterData(currentMasterType);
         });
     }
+
+    // Auto-load when navigating to settings page
+    const settingsNavItem = document.getElementById('nav-settings');
+    if (settingsNavItem) {
+        settingsNavItem.addEventListener('click', () => {
+            loadPrefixSettings();
+        });
+    }
 });
+
+// Prefix Settings Functions
+async function loadPrefixSettings() {
+    try {
+        const res = await fetch('/api/settings', { headers: getAuthHeaders() });
+        if (res.ok) {
+            const settings = await res.json();
+            const customerEl = document.getElementById('settings-prefix-customer');
+            const vendorEl   = document.getElementById('settings-prefix-vendor');
+            const purchaseEl = document.getElementById('settings-prefix-purchase');
+            const salesEl     = document.getElementById('settings-prefix-sales');
+            
+            if (customerEl) customerEl.value = settings.prefix_customer ?? 'C';
+            if (vendorEl)   vendorEl.value   = settings.prefix_vendor ?? 'V';
+            if (purchaseEl) purchaseEl.value = settings.prefix_purchase ?? 'PO/{YYYY}/{MM}/';
+            if (salesEl)     salesEl.value     = settings.prefix_sales ?? 'INV/{YYYY}/{MM}/';
+        }
+    } catch (err) {
+        console.error('Failed to load prefix settings', err);
+    }
+}
+
+async function savePrefixSettings() {
+    const payload = {
+        prefix_customer: document.getElementById('settings-prefix-customer')?.value || 'C',
+        prefix_vendor: document.getElementById('settings-prefix-vendor')?.value || 'V',
+        prefix_purchase: document.getElementById('settings-prefix-purchase')?.value || 'PO/{YYYY}/{MM}/',
+        prefix_sales: document.getElementById('settings-prefix-sales')?.value || 'INV/{YYYY}/{MM}/'
+    };
+    
+    try {
+        const res = await fetch('/api/settings', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            showToast('Pengaturan prefix penomoran berhasil disimpan!', 'success');
+        } else {
+            const err = await res.json();
+            showToast('Gagal menyimpan prefix: ' + (err.error || 'Terjadi kesalahan'), 'error');
+        }
+    } catch (err) {
+        console.error(err);
+        showToast('Gagal menghubungi server', 'error');
+    }
+}
+
+// Make functions globally accessible
+window.savePrefixSettings = savePrefixSettings;
