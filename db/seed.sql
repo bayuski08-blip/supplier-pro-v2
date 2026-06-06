@@ -38,44 +38,44 @@ ON CONFLICT (id) DO NOTHING;
 -- Customers (menggunakan address dan FK customer_category_id)
 INSERT INTO customers (id, name, customer_category_id, phone, city, address, credit_lmt, id_number, npwp) 
 VALUES 
-  ('C001', 'Toko Berkah Jaya', 'CC-1', '0812-3456-7001', 'Surabaya', 'Jl. Diponegoro No 45, Surabaya', 15000000, '3578012345678901', '01.234.567.8-001.000'),
-  ('C002', 'Warung Sari Rasa', 'CC-2', '0813-2345-6002', 'Malang', 'Jl. Ijen No 12, Malang', 5000000, '3573019876543210', NULL),
-  ('C003', 'Kafe Nusantara', 'CC-3', '0821-4567-8003', 'Surabaya', 'Jl. Basuki Rahmat No 88, Surabaya', 20000000, '3578024567890123', '02.345.678.9-002.000'),
-  ('C004', 'Toko Makmur Sentosa', 'CC-4', '0852-6789-0004', 'Sidoarjo', 'Jl. Pahlawan No 30, Sidoarjo', 10000000, '3515031234567890', NULL),
-  ('C005', 'Warung Makan Bu Diah', 'CC-2', '0896-1234-5005', 'Gresik', 'Jl. Veteran No 5, Gresik', 3000000, '3525049876543210', NULL),
-  ('C006', 'Minimarket Jaya Abadi', 'CC-1', '0811-9876-5006', 'Surabaya', 'Jl. Ahmad Yani No 100, Surabaya', 25000000, '3578056789012345', '03.456.789.0-003.000'),
-  ('C007', 'Kedai Kopi Pagi', 'CC-3', '0857-6543-2007', 'Malang', 'Jl. Kawi No 7, Malang', 8000000, '3573068901234567', NULL),
-  ('C008', 'Toko Sembako Ibu Rina', 'CC-4', '0878-3210-9008', 'Mojokerto', 'Jl. Majapahit No 22, Mojokerto', 7000000, '3576079012345678', NULL)
+  ('C0001', 'Toko Berkah Jaya', 'CC-1', '0812-3456-7001', 'Surabaya', 'Jl. Diponegoro No 45, Surabaya', 15000000, '3578012345678901', '01.234.567.8-001.000'),
+  ('C0002', 'Warung Sari Rasa', 'CC-2', '0813-2345-6002', 'Malang', 'Jl. Ijen No 12, Malang', 5000000, '3573019876543210', NULL),
+  ('C0003', 'Kafe Nusantara', 'CC-3', '0821-4567-8003', 'Surabaya', 'Jl. Basuki Rahmat No 88, Surabaya', 20000000, '3578024567890123', '02.345.678.9-002.000'),
+  ('C0004', 'Toko Makmur Sentosa', 'CC-4', '0852-6789-0004', 'Sidoarjo', 'Jl. Pahlawan No 30, Sidoarjo', 10000000, '3515031234567890', NULL),
+  ('C0005', 'Warung Makan Bu Diah', 'CC-2', '0896-1234-5005', 'Gresik', 'Jl. Veteran No 5, Gresik', 3000000, '3525049876543210', NULL),
+  ('C0006', 'Minimarket Jaya Abadi', 'CC-1', '0811-9876-5006', 'Surabaya', 'Jl. Ahmad Yani No 100, Surabaya', 25000000, '3578056789012345', '03.456.789.0-003.000'),
+  ('C0007', 'Kedai Kopi Pagi', 'CC-3', '0857-6543-2007', 'Malang', 'Jl. Kawi No 7, Malang', 8000000, '3573068901234567', NULL),
+  ('C0008', 'Toko Sembako Ibu Rina', 'CC-4', '0878-3210-9008', 'Mojokerto', 'Jl. Majapahit No 22, Mojokerto', 7000000, '3576079012345678', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 -- Vendors (menggunakan FK vendor_category_id)
 INSERT INTO vendors (id, name, vendor_category_id, phone, city, id_number) 
 VALUES 
-  ('V001', 'PT Sumber Minuman Nusantara', 'VC-1', '021-5556-7890', 'Jakarta', '3171011234567890'),
-  ('V002', 'CV Pangan Makmur', 'VC-2', '031-7778-9012', 'Surabaya', '3578022345678901'),
-  ('V003', 'UD Sembako Sentosa', 'VC-3', '031-3334-5678', 'Sidoarjo', '3515033456789012'),
-  ('V004', 'PT Kopi Nusantara', 'VC-1', '0341-445-6789', 'Malang', '3573044567890123'),
-  ('V005', 'CV Bersih Sempurna', 'VC-4', '021-2223-4567', 'Jakarta', '3171055678901234')
+  ('V0001', 'PT Sumber Minuman Nusantara', 'VC-1', '021-5556-7890', 'Jakarta', '3171011234567890'),
+  ('V0002', 'CV Pangan Makmur', 'VC-2', '031-7778-9012', 'Surabaya', '3578022345678901'),
+  ('V0003', 'UD Sembako Sentosa', 'VC-3', '031-3334-5678', 'Sidoarjo', '3515033456789012'),
+  ('V0004', 'PT Kopi Nusantara', 'VC-1', '0341-445-6789', 'Malang', '3573044567890123'),
+  ('V0005', 'CV Bersih Sempurna', 'VC-4', '021-2223-4567', 'Jakarta', '3171055678901234')
 ON CONFLICT (id) DO NOTHING;
 
 -- Sales Invoices (menggunakan payment_type_id)
 INSERT INTO sales_invoices (id, date, customer_id, subtotal, discount, tax, total, paid_amount, due_date, payment_type_id, payment_method, status) 
 VALUES 
-  ('INV-2026-0041', '2026-06-03', 'C001', 2850000, 0, 0, 2850000, 2850000, '2026-06-03', 'PT-1', 'Transfer', 'Lunas'),
-  ('INV-2026-0040', '2026-06-02', 'C003', 4750000, 0, 0, 4750000, 2000000, '2026-06-16', 'PT-2', 'Transfer', 'Sebagian'),
-  ('INV-2026-0039', '2026-06-02', 'C006', 8200000, 0, 0, 8200000, 0, '2026-06-16', 'PT-2', '-', 'Belum Bayar'),
-  ('INV-2026-0038', '2026-06-01', 'C002', 1250000, 0, 0, 1250000, 1250000, '2026-06-01', 'PT-1', 'Tunai', 'Lunas'),
-  ('INV-2026-0037', '2026-06-01', 'C004', 3400000, 0, 0, 3400000, 1500000, '2026-06-15', 'PT-3', 'Transfer', 'Sebagian')
+  ('INV/2026/06/0041', '2026-06-03', 'C001', 2850000, 0, 0, 2850000, 2850000, '2026-06-03', 'PT-1', 'Transfer', 'Lunas'),
+  ('INV/2026/06/0040', '2026-06-02', 'C003', 4750000, 0, 0, 4750000, 2000000, '2026-06-16', 'PT-2', 'Transfer', 'Sebagian'),
+  ('INV/2026/06/0039', '2026-06-02', 'C006', 8200000, 0, 0, 8200000, 0, '2026-06-16', 'PT-2', '-', 'Belum Bayar'),
+  ('INV/2026/06/0038', '2026-06-01', 'C002', 1250000, 0, 0, 1250000, 1250000, '2026-06-01', 'PT-1', 'Tunai', 'Lunas'),
+  ('INV/2026/06/0037', '2026-06-01', 'C004', 3400000, 0, 0, 3400000, 1500000, '2026-06-15', 'PT-3', 'Transfer', 'Sebagian')
 ON CONFLICT (id) DO NOTHING;
 
 -- Purchase Orders (data contoh)
 INSERT INTO purchase_orders (id, date, vendor_id, total, paid_amount, due_date, payment_type_id, status) 
 VALUES 
-  ('PO-2026-018', '2026-06-02', 'V001', 15600000, 15600000, '2026-06-02', 'PT-1', 'Selesai'),
-  ('PO-2026-017', '2026-06-01', 'V002', 8400000, 4200000, '2026-06-15', 'PT-2', 'Dalam Proses'),
-  ('PO-2026-016', '2026-05-30', 'V004', 12500000, 4000000, '2026-06-30', 'PT-2', 'Dalam Proses'),
-  ('PO-2026-015', '2026-05-28', 'V003', 6200000, 6200000, '2026-05-28', 'PT-1', 'Selesai'),
-  ('PO-2026-014', '2026-05-25', 'V005', 3800000, 3800000, '2026-05-25', 'PT-1', 'Selesai')
+  ('PO/2026/06/018', '2026-06-02', 'V001', 15600000, 15600000, '2026-06-02', 'PT-1', 'Selesai'),
+  ('PO/2026/06/017', '2026-06-01', 'V002', 8400000, 4200000, '2026-06-15', 'PT-2', 'Dalam Proses'),
+  ('PO/2026/06/016', '2026-05-30', 'V004', 12500000, 4000000, '2026-06-30', 'PT-2', 'Dalam Proses'),
+  ('PO/2026/06/015', '2026-05-28', 'V003', 6200000, 6200000, '2026-05-28', 'PT-1', 'Selesai'),
+  ('PO/2026/06/014', '2026-05-25', 'V005', 3800000, 3800000, '2026-05-25', 'PT-1', 'Selesai')
 ON CONFLICT (id) DO NOTHING;
 
 -- Cash Transactions (data contoh dengan FK)
