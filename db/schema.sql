@@ -70,7 +70,12 @@ CREATE TABLE IF NOT EXISTS vendors (
   vendor_category_id VARCHAR(255) REFERENCES vendor_categories(id) ON DELETE SET NULL,
   phone VARCHAR(255),
   city VARCHAR(255),
-  id_number VARCHAR(255)
+  address TEXT,
+  id_number VARCHAR(255),
+  npwp VARCHAR(255),
+  nama_bank VARCHAR(255),
+  nomor_rek VARCHAR(255),
+  pemilik_rek VARCHAR(255)
 );
 
 CREATE TABLE IF NOT EXISTS stock_adjustments (

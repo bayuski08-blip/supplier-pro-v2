@@ -504,7 +504,7 @@ app.get('/api/finance/cash-flow', authenticateToken, async (req, res) => {
 
 app.get('/api/finance/payables', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query('SELECT po.*, v.name as vendor_name FROM purchase_orders po LEFT JOIN vendors v ON po.vendor_id = v.id WHERE po.status != $1 AND po.status != $2', ['Lunas', 'Batal']);
+    const result = await pool.query('SELECT po.*, v.name as vendor_name FROM purchase_orders po LEFT JOIN vendors v ON po.vendor_id = v.id WHERE po.status != $1 AND po.status != $2', ['Selesai', 'Batal']);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -530,7 +530,7 @@ app.post('/api/finance/payables/:id/pay', authenticateToken, async (req, res) =>
     const currentPaid = parseFloat(po.paid_amount || 0);
     const total = parseFloat(po.total || 0);
     const newPaid = currentPaid + payAmount;
-    const newStatus = newPaid >= total ? 'selesai' : 'proses';
+    const newStatus = newPaid >= total ? 'Selesai' : 'Dalam Proses';
     
     await client.query('UPDATE purchase_orders SET paid_amount = $1, status = $2 WHERE id = $3', [newPaid, newStatus, id]);
     
@@ -623,7 +623,7 @@ app.post('/api/purchases', authenticateToken, async (req, res) => {
   const pType = payment_type_id || 'PT-1';
   const finalPaid = parseFloat(paid || paid_amount || 0);
   const finalTotal = parseFloat(total || 0);
-  const status = finalPaid >= finalTotal ? 'selesai' : 'proses';
+  const status = finalPaid >= finalTotal ? 'Selesai' : 'Dalam Proses';
   const poId = 'PO-' + Date.now();
   const poDate = date || new Date().toISOString().split('T')[0];
   
@@ -666,7 +666,7 @@ app.put('/api/purchases/:id', authenticateToken, async (req, res) => {
   const pType = payment_type_id || 'PT-1';
   const finalPaid = parseFloat(paid || paid_amount || 0);
   const finalTotal = parseFloat(total || 0);
-  const status = finalPaid >= finalTotal ? 'selesai' : 'proses';
+  const status = finalPaid >= finalTotal ? 'Selesai' : 'Dalam Proses';
   const poDate = date || new Date().toISOString().split('T')[0];
   
   const client = await pool.connect();
@@ -752,7 +752,7 @@ app.put('/api/invoices/:id', authenticateToken, async (req, res) => {
   const pType = payment_type_id || 'PT-1';
   const finalPaid = parseFloat(paid || paid_amount || 0);
   const finalTotal = parseFloat(total || 0);
-  const status = finalPaid >= finalTotal ? 'lunas' : (finalPaid > 0 ? 'sebagian' : 'belum');
+  const status = finalPaid >= finalTotal ? 'Lunas' : (finalPaid > 0 ? 'Sebagian' : 'Belum Bayar');
   const invDate = date || new Date().toISOString().split('T')[0];
   
   const client = await pool.connect();
