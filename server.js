@@ -380,24 +380,33 @@ app.post('/api/stock-adjust', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const existing = await client.query('SELECT id, stock, name FROM products WHERE id = $1', [product_id]);
+    const existing = await client.query('SELECT id, stock, name, cost_price FROM products WHERE id = $1', [product_id]);
     if (existing.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Produk tidak ditemukan' });
     }
     const oldStock = parseInt(existing.rows[0].stock);
     const productName = existing.rows[0].name;
+    const costPrice = parseFloat(existing.rows[0].cost_price || 0);
+
     await client.query('UPDATE products SET stock = $1 WHERE id = $2', [newStock, product_id]);
-    // Log adjustment in cash transactions as a note (or you can add a separate stock_adjustments table)
+
+    // Tentukan tipe dan jumlah berdasarkan selisih stok
+    const diff = newStock - oldStock;
+    const txType = diff >= 0 ? 'IN' : 'OUT';
+    const amount = Math.abs(diff) * costPrice;
+    const keterangan = diff > 0 ? 'tambah banyak' : diff < 0 ? 'Menyusut' : 'tidak berubah';
+
     const ctId = 'SA-' + Date.now();
     const ctDate = new Date().toISOString().split('T')[0];
-    const desc = `Stock Opname: ${productName} | Sebelum: ${oldStock} → Sesudah: ${newStock}${note ? ' | ' + note : ''}`;
+    const desc = `Stock Opname: ${productName} | Sebelum: ${oldStock} → Sesudah: ${newStock} | ${keterangan}${note ? ' | ' + note : ''}`;
+
     await client.query(
       'INSERT INTO cash_transactions (id, date, type, category, description, amount, method) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [ctId, ctDate, 'OUT', 'Penyesuaian Stok', desc, 0, 'Stock Opname']
+      [ctId, ctDate, txType, 'Penyesuaian Stok', desc, amount, 'Stock Opname']
     );
     await client.query('COMMIT');
-    res.json({ success: true, old_stock: oldStock, new_stock: newStock });
+    res.json({ success: true, old_stock: oldStock, new_stock: newStock, type: txType, amount });
   } catch (err) {
     await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
