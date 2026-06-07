@@ -62,57 +62,57 @@ ON CONFLICT (id) DO NOTHING;
 -- Sales Invoices (menggunakan payment_type_id)
 INSERT INTO sales_invoices (id, date, customer_id, subtotal, discount, tax, total, paid_amount, due_date, payment_type_id, payment_method, status) 
 VALUES 
-  ('INV/2026/06/0041', '2026-06-03', 'C0001', 1255000, 0, 0, 1255000, 1255000, '2026-06-03', 'PT-1', 'Transfer', 'Lunas'),
-  ('INV/2026/06/0040', '2026-06-02', 'C0003', 1600000, 0, 0, 1600000, 1000000, '2026-06-16', 'PT-2', 'Transfer', 'Sebagian'),
-  ('INV/2026/06/0039', '2026-06-02', 'C0006', 1170000, 0, 0, 1170000, 0, '2026-06-16', 'PT-2', '-', 'Belum Bayar'),
-  ('INV/2026/06/0038', '2026-06-01', 'C0002', 780000, 0, 0, 780000, 780000, '2026-06-01', 'PT-1', 'Tunai', 'Lunas'),
-  ('INV/2026/06/0037', '2026-06-01', 'C0004', 2850000, 0, 0, 2850000, 1500000, '2026-06-15', 'PT-3', 'Transfer', 'Sebagian')
+  ('INV-2026-06-0041', '2026-06-03', 'C0001', 1255000, 0, 0, 1255000, 1255000, '2026-06-03', 'PT-1', 'Transfer', 'Lunas'),
+  ('INV-2026-06-0040', '2026-06-02', 'C0003', 1600000, 0, 0, 1600000, 1000000, '2026-06-16', 'PT-2', 'Transfer', 'Sebagian'),
+  ('INV-2026-06-0039', '2026-06-02', 'C0006', 1170000, 0, 0, 1170000, 0, '2026-06-16', 'PT-2', '-', 'Belum Bayar'),
+  ('INV-2026-06-0038', '2026-06-01', 'C0002', 780000, 0, 0, 780000, 780000, '2026-06-01', 'PT-1', 'Tunai', 'Lunas'),
+  ('INV-2026-06-0037', '2026-06-01', 'C0004', 2850000, 0, 0, 2850000, 1500000, '2026-06-15', 'PT-3', 'Transfer', 'Sebagian')
 ON CONFLICT (id) DO NOTHING;
 
 -- Purchase Orders (data contoh)
 INSERT INTO purchase_orders (id, date, vendor_id, total, paid_amount, due_date, payment_type_id, status) 
 VALUES 
-  ('PO/2026/06/0018', '2026-06-02', 'V0001', 3450000, 3450000, '2026-06-02', 'PT-1', 'Selesai'),
-  ('PO/2026/06/0017', '2026-06-01', 'V0002', 6800000, 3000000, '2026-06-15', 'PT-2', 'Dalam Proses'),
-  ('PO/2026/06/0016', '2026-05-30', 'V0004', 6400000, 2000000, '2026-06-30', 'PT-2', 'Dalam Proses'),
-  ('PO/2026/06/0015', '2026-05-28', 'V0003', 5900000, 5900000, '2026-05-28', 'PT-1', 'Selesai'),
-  ('PO/2026/06/0014', '2026-05-25', 'V0005', 10550000, 10550000, '2026-05-25', 'PT-1', 'Selesai')
+  ('PO-2026-06-0018', '2026-06-02', 'V0001', 3450000, 3450000, '2026-06-02', 'PT-1', 'Selesai'),
+  ('PO-2026-06-0017', '2026-06-01', 'V0002', 6800000, 3000000, '2026-06-15', 'PT-2', 'Dalam Proses'),
+  ('PO-2026-06-0016', '2026-05-30', 'V0004', 6400000, 2000000, '2026-06-30', 'PT-2', 'Dalam Proses'),
+  ('PO-2026-06-0015', '2026-05-28', 'V0003', 5900000, 5900000, '2026-05-28', 'PT-1', 'Selesai'),
+  ('PO-2026-06-0014', '2026-05-25', 'V0005', 10550000, 10550000, '2026-05-25', 'PT-1', 'Selesai')
 ON CONFLICT (id) DO NOTHING;
 
 -- Invoice Items (sample items for seeded invoices)
 INSERT INTO invoice_items (id, invoice_id, product_id, quantity, price) VALUES
-  ('INV-ITEM-001', 'INV/2026/06/0041', 'P001', 10, 68000),
-  ('INV-ITEM-002', 'INV/2026/06/0041', 'P004', 5, 115000),
-  ('INV-ITEM-003', 'INV/2026/06/0040', 'P003', 20, 35000),
-  ('INV-ITEM-004', 'INV/2026/06/0040', 'P008', 50, 18000),
-  ('INV-ITEM-005', 'INV/2026/06/0039', 'P005', 15, 42000),
-  ('INV-ITEM-006', 'INV/2026/06/0039', 'P006', 20, 27000),
-  ('INV-ITEM-007', 'INV/2026/06/0038', 'P007', 10, 78000),
-  ('INV-ITEM-008', 'INV/2026/06/0037', 'P009', 25, 36000),
-  ('INV-ITEM-009', 'INV/2026/06/0037', 'P010', 10, 195000)
+  ('INV-ITEM-001', 'INV-2026-06-0041', 'P001', 10, 68000),
+  ('INV-ITEM-002', 'INV-2026-06-0041', 'P004', 5, 115000),
+  ('INV-ITEM-003', 'INV-2026-06-0040', 'P003', 20, 35000),
+  ('INV-ITEM-004', 'INV-2026-06-0040', 'P008', 50, 18000),
+  ('INV-ITEM-005', 'INV-2026-06-0039', 'P005', 15, 42000),
+  ('INV-ITEM-006', 'INV-2026-06-0039', 'P006', 20, 27000),
+  ('INV-ITEM-007', 'INV-2026-06-0038', 'P007', 10, 78000),
+  ('INV-ITEM-008', 'INV-2026-06-0037', 'P009', 25, 36000),
+  ('INV-ITEM-009', 'INV-2026-06-0037', 'P010', 10, 195000)
 ON CONFLICT (id) DO NOTHING;
 
 -- Purchase Order Items (sample items for seeded POs)
 INSERT INTO purchase_order_items (id, purchase_order_id, product_id, quantity, cost) VALUES
-  ('PO-ITEM-001', 'PO/2026/06/0018', 'P001', 50, 45000),
-  ('PO-ITEM-002', 'PO/2026/06/0018', 'P002', 100, 12000),
-  ('PO-ITEM-003', 'PO/2026/06/0017', 'P003', 100, 22000),
-  ('PO-ITEM-004', 'PO/2026/06/0017', 'P004', 50, 92000),
-  ('PO-ITEM-005', 'PO/2026/06/0016', 'P005', 100, 28000),
-  ('PO-ITEM-006', 'PO/2026/06/0016', 'P006', 200, 18000),
-  ('PO-ITEM-007', 'PO/2026/06/0015', 'P007', 50, 62000),
-  ('PO-ITEM-008', 'PO/2026/06/0015', 'P008', 200, 14000),
-  ('PO-ITEM-009', 'PO/2026/06/0014', 'P009', 100, 28000),
-  ('PO-ITEM-0010', 'PO/2026/06/0014', 'P010', 50, 155000)
+  ('PO-ITEM-001', 'PO-2026-06-0018', 'P001', 50, 45000),
+  ('PO-ITEM-002', 'PO-2026-06-0018', 'P002', 100, 12000),
+  ('PO-ITEM-003', 'PO-2026-06-0017', 'P003', 100, 22000),
+  ('PO-ITEM-004', 'PO-2026-06-0017', 'P004', 50, 92000),
+  ('PO-ITEM-005', 'PO-2026-06-0016', 'P005', 100, 28000),
+  ('PO-ITEM-006', 'PO-2026-06-0016', 'P006', 200, 18000),
+  ('PO-ITEM-007', 'PO-2026-06-0015', 'P007', 50, 62000),
+  ('PO-ITEM-008', 'PO-2026-06-0015', 'P008', 200, 14000),
+  ('PO-ITEM-009', 'PO-2026-06-0014', 'P009', 100, 28000),
+  ('PO-ITEM-0010', 'PO-2026-06-0014', 'P010', 50, 155000)
 ON CONFLICT (id) DO NOTHING;
 
 -- Cash Transactions (data contoh dengan FK)
 INSERT INTO cash_transactions (id, date, type, category, description, amount, method, invoice_id, purchase_order_id, payment_type_id, user_id) 
 VALUES
-  ('CT0001', '2026-06-03', 'IN', 'Penjualan', 'Pembayaran INV/2026/06/0041', 1255000, 'Transfer Bank', 'INV/2026/06/0041', NULL, 'PT-1', 1),
-  ('CT0002', '2026-06-02', 'IN', 'Penjualan', 'DP dari Kafe Nusantara', 1000000, 'Transfer Bank', 'INV/2026/06/0040', NULL, 'PT-3', 1),
-  ('CT0003', '2026-06-02', 'OUT', 'Pembelian Stok', 'Bayar PO/2026/06/0018', 3450000, 'Transfer Bank', NULL, 'PO/2026/06/0018', 'PT-1', 1),
-  ('CT0004', '2026-06-01', 'IN', 'Penjualan', 'Pembayaran tunai Warung Sari Rasa', 780000, 'Tunai', 'INV/2026/06/0038', NULL, 'PT-1', 1),
+  ('CT0001', '2026-06-03', 'IN', 'Penjualan', 'Pembayaran INV-2026-06-0041', 1255000, 'Transfer Bank', 'INV-2026-06-0041', NULL, 'PT-1', 1),
+  ('CT0002', '2026-06-02', 'IN', 'Penjualan', 'DP dari Kafe Nusantara', 1000000, 'Transfer Bank', 'INV-2026-06-0040', NULL, 'PT-3', 1),
+  ('CT0003', '2026-06-02', 'OUT', 'Pembelian Stok', 'Bayar PO-2026-06-0018', 3450000, 'Transfer Bank', NULL, 'PO-2026-06-0018', 'PT-1', 1),
+  ('CT0004', '2026-06-01', 'IN', 'Penjualan', 'Pembayaran tunai Warung Sari Rasa', 780000, 'Tunai', 'INV-2026-06-0038', NULL, 'PT-1', 1),
   ('CT0005', '2026-06-01', 'OUT', 'Operasional', 'Listrik & air gudang', 2500000, 'Transfer Bank', NULL, NULL, NULL, 1),
   ('CT0006', '2026-06-04', 'OUT', 'Operasional', 'Biaya internet bulanan', 500000, 'Transfer Bank', NULL, NULL, NULL, 1),
   ('CT0007', '2026-06-05', 'OUT', 'Gaji', 'Pembayaran gaji karyawan bulan Mei', 12000000, 'Transfer Bank', NULL, NULL, NULL, 1),
@@ -130,7 +130,7 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO settings (key, value) VALUES
   ('prefix_customer', 'C'),
   ('prefix_vendor', 'V'),
-  ('prefix_purchase', 'PO/{YYYY}/{MM}/'),
-  ('prefix_sales', 'INV/{YYYY}/{MM}/')
+  ('prefix_purchase', 'PO-{YYYY}-{MM}-'),
+  ('prefix_sales', 'INV-{YYYY}-{MM}-')
 ON CONFLICT (key) DO NOTHING;
 
