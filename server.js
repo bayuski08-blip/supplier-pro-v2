@@ -487,9 +487,19 @@ app.delete('/api/customers/:id', authenticateToken, async (req, res) => {
 app.get('/api/vendors', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT v.*, vc.name as category_name
+      SELECT v.*, vc.name as category_name,
+        COALESCE(po_agg.total_purchases, 0) AS total_purchases,
+        COALESCE(po_agg.outstanding_debt, 0) AS outstanding_debt
       FROM vendors v
       LEFT JOIN vendor_categories vc ON v.vendor_category_id = vc.id
+      LEFT JOIN (
+        SELECT vendor_id,
+          SUM(total) AS total_purchases,
+          SUM(GREATEST(total - paid_amount, 0)) AS outstanding_debt
+        FROM purchase_orders
+        WHERE status != 'Batal'
+        GROUP BY vendor_id
+      ) po_agg ON po_agg.vendor_id = v.id
       ORDER BY v.name ASC
     `);
     res.json(result.rows);
@@ -939,7 +949,8 @@ app.post('/api/finance/payables/:id/pay', authenticateToken, async (req, res) =>
     // Log cash transaction OUT
     const ctId = 'CT-' + Date.now() + Math.floor(Math.random()*1000);
     const date = new Date().toISOString().split('T')[0];
-    await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, purchase_order_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [ctId, date, 'OUT', 'Pembelian Stok', `Bayar Cicilan PO ${id}`, payAmount, 'Transfer Bank', id]);
+    const payMethodStr = (req.body.payment_method) || (po.payment_type_id === 'PT-1' ? 'Tunai' : 'Transfer Bank');
+    await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, purchase_order_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [ctId, date, 'OUT', 'Pembelian Stok', `Bayar Cicilan PO ${id}`, payAmount, payMethodStr, id]);
     
     await client.query('COMMIT');
     res.json({ success: true });
@@ -1191,10 +1202,11 @@ app.put('/api/invoices/:id', authenticateToken, async (req, res) => {
       await client.query('UPDATE sales_invoices SET date = $1, customer_id = $2, subtotal = $3, total = $4, paid_amount = $5, status = $6, payment_type_id = $7 WHERE id = $8', [invDate, custId, finalTotal, finalTotal, finalPaid, status, pType, invId]);
     }
     
-    await client.query('DELETE FROM cash_transactions WHERE invoice_id = $1', [invId]);
+    await client.query('DELETE FROM cash_transactions WHERE invoice_id = $1 AND invoice_id IS NOT NULL AND (status IS NULL OR status = \'active\')', [invId]);
     if (finalPaid > 0) {
       const ctId = 'CT-' + Date.now() + Math.floor(Math.random()*1000);
-      await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, invoice_id, payment_type_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [ctId, invDate, 'IN', 'Penjualan', `Pembayaran INV ${invId} (Edit)`, finalPaid, 'Transfer Bank', invId, pType]);
+      const methodEdit = pType === 'PT-1' ? 'Tunai' : 'Transfer Bank';
+      await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, invoice_id, payment_type_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [ctId, invDate, 'IN', 'Penjualan', `Pembayaran INV ${invId} (Edit)`, finalPaid, methodEdit, invId, pType]);
     }
     
     await client.query('COMMIT');

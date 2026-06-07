@@ -1810,15 +1810,16 @@ async function fetchVendors() {
             name: v.name,
             category: v.category_name || v.vendor_category_id || '',
             categoryId: v.vendor_category_id || '',
-            phone: v.phone,
-            city: v.city,
-            address: v.address,
-            bank: v.nama_bank || v.bank_account,
-            rekening: v.nomor_rek,
-            pemilik: v.pemilik_rek,
-            idNumber: v.id_number,
-            npwp: v.npwp,
-            debt: parseFloat(v.debt) || 0
+            phone: v.phone || '-',
+            city: v.city || '-',
+            address: v.address || '',
+            bank: v.nama_bank || v.bank_account || '',
+            rekening: v.nomor_rek || '',
+            pemilik: v.pemilik_rek || '',
+            idNumber: String(v.id_number || ''),
+            npwp: String(v.npwp || ''),
+            totalPurchases: parseFloat(v.total_purchases) || 0,
+            debt: parseFloat(v.outstanding_debt) || parseFloat(v.debt) || 0
         }));
         
         // Populate vendor dropdowns in PO modals
@@ -1848,8 +1849,9 @@ async function saveVendor(isEdit) {
         nama_bank: document.getElementById(`${prefix}-vendor-bank`)?.value || '',
         nomor_rek: document.getElementById(`${prefix}-vendor-rekening`)?.value || '',
         pemilik_rek: document.getElementById(`${prefix}-vendor-pemilik`)?.value || '',
-        id_number: document.getElementById(`${prefix}-vendor-idnumber`)?.value || '',
-        npwp: document.getElementById(`${prefix}-vendor-npwp`)?.value || ''
+        // id_number field covers both NPWP and KTP (16-digit string)
+        id_number: String(document.getElementById(`${prefix}-vendor-idnumber`)?.value || '').trim(),
+        npwp: String(document.getElementById(`${prefix}-vendor-idnumber`)?.value || '').trim()
     };
 
     const url = isEdit ? `/api/vendors/${id}` : '/api/vendors';
@@ -1896,7 +1898,8 @@ function openEditVendorModal(id) {
     if(document.getElementById('edit-vendor-bank')) document.getElementById('edit-vendor-bank').value = v.bank || '';
     if(document.getElementById('edit-vendor-rekening')) document.getElementById('edit-vendor-rekening').value = v.rekening || '';
     if(document.getElementById('edit-vendor-pemilik')) document.getElementById('edit-vendor-pemilik').value = v.pemilik || '';
-    if(document.getElementById('edit-vendor-idnumber')) document.getElementById('edit-vendor-idnumber').value = v.idNumber || '';
+    if(document.getElementById('edit-vendor-idnumber')) document.getElementById('edit-vendor-idnumber').value = String(v.idNumber || '');
+    if(document.getElementById('edit-vendor-npwp')) document.getElementById('edit-vendor-npwp').value = String(v.npwp || '');
     openModal('modal-edit-vendor');
 }
 
@@ -2457,8 +2460,16 @@ async function saveInvoiceEdits() {
             await fetchInvoices();
             await fetchProducts(); // stock changed
         } else {
-            const err = await res.json();
-            showToast('Error: ' + (err.error || 'Gagal menyimpan invoice'), 'error');
+            let errMsg = 'Gagal menyimpan invoice';
+            try {
+                const errData = await res.json();
+                if (errData.error) errMsg = errData.error;
+            } catch (e) {
+                if (res.status === 401 || res.status === 403) errMsg = 'Sesi habis, silakan login ulang.';
+                else errMsg = `Error ${res.status} dari server.`;
+            }
+            showToast('Error: ' + errMsg, 'error');
+            if (res.status === 401 || res.status === 403) setTimeout(() => window.location.reload(), 1500);
         }
     } catch (err) {
         console.error(err);
@@ -2709,9 +2720,18 @@ async function submitPayment() {
                 renderHutang();
             }
             await fetchCashTransactions();
+            await fetchVendors();
         } else {
-            const err = await res.json();
-            showToast('Error: ' + (err.error || 'Gagal memproses pembayaran'), 'error');
+            let errMsg = 'Gagal memproses pembayaran';
+            try {
+                const errData = await res.json();
+                if (errData.error) errMsg = errData.error;
+            } catch (e) {
+                if (res.status === 401 || res.status === 403) errMsg = 'Sesi habis, silakan login ulang.';
+                else errMsg = `Error ${res.status} dari server.`;
+            }
+            showToast('Error: ' + errMsg, 'error');
+            if (res.status === 401 || res.status === 403) setTimeout(() => window.location.reload(), 1500);
         }
     } catch (err) {
         console.error(err);
