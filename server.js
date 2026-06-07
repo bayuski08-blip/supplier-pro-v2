@@ -538,7 +538,12 @@ app.get('/api/invoices', authenticateToken, async (req, res) => {
 
 app.get('/api/invoices/:id/items', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM invoice_items WHERE invoice_id = $1', [req.params.id]);
+    const result = await pool.query(`
+      SELECT ii.*, p.name as product_name, p.sell_price
+      FROM invoice_items ii
+      LEFT JOIN products p ON p.id = ii.product_id
+      WHERE ii.invoice_id = $1
+    `, [req.params.id]);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -547,7 +552,12 @@ app.get('/api/invoices/:id/items', authenticateToken, async (req, res) => {
 
 app.get('/api/purchases/:id/items', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM purchase_order_items WHERE purchase_order_id = $1', [req.params.id]);
+    const result = await pool.query(`
+      SELECT poi.*, p.name as product_name, p.cost_price
+      FROM purchase_order_items poi
+      LEFT JOIN products p ON p.id = poi.product_id
+      WHERE poi.purchase_order_id = $1
+    `, [req.params.id]);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });

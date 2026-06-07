@@ -2059,7 +2059,7 @@ function renderEditPurchaseItems() {
     let subtotal = 0;
     
     editPurchaseItems.forEach((item, index) => {
-        const product = PRODUCTS.find(p => p.id === item.product_id) || { name: item.product_id, unit: 'pcs' };
+        const product = PRODUCTS.find(p => p.id === item.product_id) || { name: item.product_name || item.product_id, unit: 'pcs' };
         const itemPrice = parseFloat(item.price ?? item.cost ?? 0);
         const itemTotal = (parseFloat(item.quantity) || 0) * itemPrice;
         subtotal += itemTotal;
@@ -2176,6 +2176,8 @@ async function openEditPurchaseModal(id) {
             PRODUCTS.map(p => `<option value="${p.id}">${p.name} (${rp(p.cost || p.price)})</option>`).join('');
     }
 
+    // Reset items and show loading
+    editPurchaseItems = [];
     const container = document.getElementById('edit-purchase-items-container');
     if (container) container.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 1rem; color: var(--gray-400);">Memuat data item...</td></tr>';
 
@@ -2183,12 +2185,14 @@ async function openEditPurchaseModal(id) {
         const res = await fetch(`/api/purchases/${id}/items`, { headers: getAuthHeaders() });
         if (res.ok) {
             editPurchaseItems = await res.json();
-            renderEditPurchaseItems();
+        } else {
+            console.warn('Failed to load PO items, status:', res.status);
         }
     } catch (err) {
         console.error('Failed to load PO items', err);
-        if (container) container.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 1rem; color: var(--rose-500);">Gagal memuat data item</td></tr>';
     }
+    // Always render — will show 'Belum ada item' if array empty
+    renderEditPurchaseItems();
 
     openModal('modal-edit-purchase');
 }
@@ -2290,7 +2294,7 @@ function renderEditInvoiceItems() {
     let subtotal = 0;
     
     editInvoiceItems.forEach((item, index) => {
-        const product = PRODUCTS.find(p => p.id === item.product_id) || { name: item.product_id, unit: 'pcs' };
+        const product = PRODUCTS.find(p => p.id === item.product_id) || { name: item.product_name || item.product_id, unit: 'pcs' };
         const itemTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.price) || 0);
         subtotal += itemTotal;
         
@@ -2399,6 +2403,8 @@ async function openEditInvoiceModal(id) {
             PRODUCTS.map(p => `<option value="${p.id}">${p.name} (${rp(p.price)})</option>`).join('');
     }
     
+    // Reset items and show loading
+    editInvoiceItems = [];
     const container = document.getElementById('edit-invoice-items-container');
     if (container) container.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 1rem; color: var(--gray-400);">Memuat data item...</td></tr>';
     
@@ -2406,12 +2412,14 @@ async function openEditInvoiceModal(id) {
         const res = await fetch(`/api/invoices/${id}/items`, { headers: getAuthHeaders() });
         if (res.ok) {
             editInvoiceItems = await res.json();
-            renderEditInvoiceItems();
+        } else {
+            console.warn('Failed to load invoice items, status:', res.status);
         }
     } catch (err) {
         console.error('Failed to load invoice items', err);
-        if (container) container.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 1rem; color: var(--rose-500);">Gagal memuat data item</td></tr>';
     }
+    // Always render — will show 'Belum ada item' if array empty
+    renderEditInvoiceItems();
     
     openModal('modal-edit-invoice');
 }

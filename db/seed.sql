@@ -79,6 +79,33 @@ VALUES
   ('PO/2026/06/0014', '2026-05-25', 'V0005', 3800000, 3800000, '2026-05-25', 'PT-1', 'Selesai')
 ON CONFLICT (id) DO NOTHING;
 
+-- Invoice Items (sample items for seeded invoices)
+INSERT INTO invoice_items (id, invoice_id, product_id, quantity, price) VALUES
+  ('INV-ITEM-001', 'INV/2026/06/0041', 'P001', 10, 125000),
+  ('INV-ITEM-002', 'INV/2026/06/0041', 'P002', 20, 80000),
+  ('INV-ITEM-003', 'INV/2026/06/0040', 'P003', 15, 190000),
+  ('INV-ITEM-004', 'INV/2026/06/0040', 'P004', 30, 85000),
+  ('INV-ITEM-005', 'INV/2026/06/0039', 'P005', 40, 120000),
+  ('INV-ITEM-006', 'INV/2026/06/0039', 'P006', 50, 45000),
+  ('INV-ITEM-007', 'INV/2026/06/0038', 'P007', 5, 150000),
+  ('INV-ITEM-008', 'INV/2026/06/0037', 'P008', 10, 95000),
+  ('INV-ITEM-009', 'INV/2026/06/0037', 'P009', 20, 85000)
+ON CONFLICT (id) DO NOTHING;
+
+-- Purchase Order Items (sample items for seeded POs)
+INSERT INTO purchase_order_items (id, purchase_order_id, product_id, quantity, cost) VALUES
+  ('PO-ITEM-001', 'PO/2026/06/0018', 'P001', 100, 80000),
+  ('PO-ITEM-002', 'PO/2026/06/0018', 'P002', 200, 55000),
+  ('PO-ITEM-003', 'PO/2026/06/0017', 'P003', 100, 50000),
+  ('PO-ITEM-004', 'PO/2026/06/0017', 'P004', 150, 39000),
+  ('PO-ITEM-005', 'PO/2026/06/0016', 'P005', 100, 75000),
+  ('PO-ITEM-006', 'PO/2026/06/0016', 'P006', 200, 28000),
+  ('PO-ITEM-007', 'PO/2026/06/0015', 'P007', 50, 68000),
+  ('PO-ITEM-008', 'PO/2026/06/0015', 'P008', 200, 11000),
+  ('PO-ITEM-009', 'PO/2026/06/0014', 'P009', 100, 22000),
+  ('PO-ITEM-010', 'PO/2026/06/0014', 'P010', 50, 52000)
+ON CONFLICT (id) DO NOTHING;
+
 -- Cash Transactions (data contoh dengan FK)
 INSERT INTO cash_transactions (id, date, type, category, description, amount, method, invoice_id, purchase_order_id, payment_type_id, user_id) 
 VALUES
