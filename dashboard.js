@@ -395,7 +395,19 @@ function renderCustomers(filter = '', type = '') {
         filtered = filtered.filter(c => c.type === type);
     }
 
-    grid.innerHTML = filtered.map(c => `
+    // Helper: sisa limit color based on 50%/10% thresholds
+    function limitColor(sisa, limit) {
+        if (limit <= 0) return 'var(--slate-400)';
+        const pct = sisa / limit;
+        if (pct > 0.5)  return 'var(--emerald-600)';
+        if (pct > 0.1)  return 'var(--amber-500)';
+        return 'var(--rose-500)';
+    }
+
+    grid.innerHTML = filtered.map(c => {
+        const color = limitColor(c.sisaLimitPiutang ?? c.remainingLimit, c.creditLimit);
+        const pctUsed = c.creditLimit > 0 ? Math.min(100, Math.round((c.totalPiutangBerjalan ?? c.outstandingReceivables) / c.creditLimit * 100)) : 0;
+        return `
         <div class="entity-card" style="position: relative;">
             <button class="btn-toolbar secondary" style="position: absolute; top: 1rem; right: 1rem; padding: 0.25rem 0.5rem; font-size: 0.75rem;" title="Edit Pelanggan" onclick="openEditCustomerModal('${c.id}')">
                 <i data-lucide="edit-2" style="width: 14px; height: 14px; margin: 0;"></i>
@@ -403,44 +415,58 @@ function renderCustomers(filter = '', type = '') {
             <button class="btn-toolbar secondary" style="position: absolute; top: 1rem; right: 3rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--rose-500);" title="Hapus Pelanggan" onclick="deleteCustomer('${c.id}')">
                 <i data-lucide="trash-2" style="width: 14px; height: 14px; margin: 0;"></i>
             </button>
-            <div class="entity-card-header">
+            <div class="entity-card-header" style="cursor:pointer;" onclick="openCustomerDetail('${c.id}')">
                 <div class="entity-avatar ${c.color}">${c.name.charAt(0)}</div>
                 <div>
                     <div class="entity-name">${c.name}</div>
-                    <div class="entity-type">${c.type} • ${c.city}</div>
+                    <div class="entity-type">${c.type} &bull; ${c.city}</div>
                 </div>
             </div>
             <div class="entity-details">
-                <div class="entity-detail">
-                    <span class="entity-detail-label">ID Pelanggan</span>
-                    <span class="entity-detail-value">${c.id}</span>
-                </div>
                 <div class="entity-detail">
                     <span class="entity-detail-label">Telepon / WA</span>
                     <span class="entity-detail-value">${c.phone}</span>
                 </div>
                 <div class="entity-detail">
-                    <span class="entity-detail-label">Limit Piutang</span>
-                    <span class="entity-detail-value">${rpShort(c.creditLimit)}</span>
+                    <span class="entity-detail-label">Sisa Limit Piutang</span>
+                    <span class="entity-detail-value" style="color:${color}; font-weight:700;">${rpShort(c.sisaLimitPiutang ?? c.remainingLimit)}</span>
                 </div>
                 <div class="entity-detail">
                     <span class="entity-detail-label">Total Belanja</span>
-                    <span class="entity-detail-value">${rpShort(c.totalSpent)}</span>
+                    <span class="entity-detail-value">${rpShort(c.totalBelanja ?? c.totalSpent)}</span>
+                </div>
+            </div>
+            <div style="margin-top:0.6rem;">
+                <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--slate-500);margin-bottom:3px;">
+                    <span>Limit terpakai ${pctUsed}%</span>
+                    <span>${rpShort(c.creditLimit)}</span>
+                </div>
+                <div style="background:var(--slate-200);border-radius:99px;height:5px;overflow:hidden;">
+                    <div style="height:100%;width:${pctUsed}%;background:${color};border-radius:99px;transition:width .4s;"></div>
                 </div>
             </div>
         </div>
-    `).join('');
+    `}).join('');
 
     if (listBody) {
-        listBody.innerHTML = filtered.map(c => `
-            <tr>
+        listBody.innerHTML = filtered.map(c => {
+            const sisa = c.sisaLimitPiutang ?? c.remainingLimit;
+            const color = sisa / (c.creditLimit || 1) > 0.5
+                ? 'var(--emerald-600)'
+                : sisa / (c.creditLimit || 1) > 0.1
+                    ? 'var(--amber-500)'
+                    : 'var(--rose-500)';
+            return `
+            <tr style="cursor:pointer;" onclick="openCustomerDetail('${c.id}')">
                 <td style="font-weight:600; color: var(--blue-600);">${c.id}</td>
                 <td style="font-weight:600;">${c.name}</td>
                 <td><span class="badge-status aman">${c.type}</span></td>
                 <td>${c.city}</td>
                 <td>${c.phone}</td>
                 <td style="font-weight:700;">${rp(c.creditLimit)}</td>
-                <td style="text-align: right; white-space: nowrap;">
+                <td style="font-weight:700; color:${color}">${rp(sisa)}</td>
+                <td style="font-weight:600;">${rp(c.totalBelanja ?? c.totalSpent)}</td>
+                <td style="text-align: right; white-space: nowrap;" onclick="event.stopPropagation()">
                     <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" title="Edit Pelanggan" onclick="openEditCustomerModal('${c.id}')">
                         <i data-lucide="edit-2" style="width: 14px; height: 14px; margin: 0;"></i>
                     </button>
@@ -449,7 +475,7 @@ function renderCustomers(filter = '', type = '') {
                     </button>
                 </td>
             </tr>
-        `).join('');
+        `}).join('');
     }
 
     if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -1561,9 +1587,9 @@ async function fetchProducts() {
             category_id: p.category_id,
             cost: parseFloat(p.cost_price),
             price: parseFloat(p.sell_price),
-            stock: p.stock,
-            minStock: p.min_stock,
-            unit: p.unit || p.badge || 'pcs',
+            stock: parseFloat(p.stock),
+            minStock: parseFloat(p.min_stock),
+            unit: p.unit || 'pcs',
             unit_id: p.unit_id,
             emoji: '📦'
         }));
@@ -1587,10 +1613,9 @@ async function saveProduct(isEdit) {
         category_id: categoryValue,   // FIX: backend expects category_id not category
         cost_price: parseFloat(document.getElementById(`${prefix}-product-cost`).value) || 0,
         sell_price: parseFloat(document.getElementById(`${prefix}-product-price`).value) || 0,
-        stock: isEdit ? parseInt(document.getElementById('edit-product-stock').value) || 0 : parseInt(document.getElementById('add-product-stock').value) || 0,
-        min_stock: parseInt(document.getElementById(`${prefix}-product-minstock`).value) || 0,
-        unit_id: isEdit ? document.getElementById('edit-product-unit').value : document.getElementById('add-product-unit').value,
-        badge: isEdit ? document.getElementById('edit-product-unit').value : document.getElementById('add-product-unit').value
+        stock: isEdit ? parseFloat(document.getElementById('edit-product-stock').value) || 0 : parseFloat(document.getElementById('add-product-stock').value) || 0,
+        min_stock: parseFloat(document.getElementById(`${prefix}-product-minstock`).value) || 0,
+        unit_id: isEdit ? document.getElementById('edit-product-unit').value : document.getElementById('add-product-unit').value
     };
 
     if (!payload.name || !payload.sku) {
@@ -1720,11 +1745,17 @@ async function fetchCustomers() {
             name: c.name,
             type: c.category_name || c.customer_category_id || c.type || '',
             categoryId: c.customer_category_id || '',
-            phone: c.phone,
-            city: c.city,
+            phone: c.phone || '-',
+            city: c.city || '-',
+            address: c.address || '',
             creditLimit: parseFloat(c.credit_lmt) || 0,
-            totalSpent: 0,
-            totalOrders: 0,
+            totalBelanja: parseFloat(c.total_belanja) || 0,
+            totalPiutangBerjalan: parseFloat(c.total_piutang_berjalan) || 0,
+            sisaLimitPiutang: parseFloat(c.sisa_limit_piutang) || parseFloat(c.credit_lmt) || 0,
+            // legacy aliases for backward compat
+            totalSpent: parseFloat(c.total_belanja) || 0,
+            outstandingReceivables: parseFloat(c.total_piutang_berjalan) || 0,
+            remainingLimit: parseFloat(c.sisa_limit_piutang) ?? parseFloat(c.credit_lmt) ?? 0,
             color: 'blue'
         }));
         renderCustomers(document.getElementById('customer-search')?.value, document.getElementById('customer-type-filter')?.value);
@@ -1741,6 +1772,7 @@ async function saveCustomer(isEdit) {
         name: document.getElementById(`${prefix}-customer-name`).value,
         customer_category_id: document.getElementById(`${prefix}-customer-type`).value,
         city: document.getElementById(`${prefix}-customer-city`).value,
+        address: document.getElementById(`${prefix}-customer-address`)?.value || '',
         phone: document.getElementById(`${prefix}-customer-phone`).value,
         credit_lmt: document.getElementById(`${prefix}-customer-limit`).value
     };
@@ -1756,15 +1788,29 @@ async function saveCustomer(isEdit) {
         });
         if (res.ok) {
             closeModal(`modal-${isEdit ? 'edit' : 'add'}-customer`);
+            showToast(isEdit ? 'Pelanggan berhasil diperbarui!' : 'Pelanggan berhasil ditambahkan!', 'success');
             fetchCustomers();
         } else {
             const err = await res.json();
-            alert('Error: ' + err.error);
+            showToast('Error: ' + (err.error || 'Gagal menyimpan'), 'error');
         }
     } catch (err) {
         console.error(err);
-        alert('Gagal menyimpan pelanggan');
+        showToast('Gagal menyimpan pelanggan', 'error');
     }
+}
+
+function openAddCustomerModal() {
+    const fields = ['name', 'city', 'phone', 'limit'];
+    fields.forEach(f => {
+        const el = document.getElementById(`add-customer-${f}`);
+        if (el) el.value = '';
+    });
+    const addrEl = document.getElementById('add-customer-address');
+    if (addrEl) addrEl.value = '';
+    const typeEl = document.getElementById('add-customer-type');
+    if (typeEl) typeEl.selectedIndex = 0;
+    openModal('modal-add-customer');
 }
 
 function openEditCustomerModal(id) {
@@ -1774,10 +1820,83 @@ function openEditCustomerModal(id) {
     document.getElementById('edit-customer-id-display').value = c.id;
     document.getElementById('edit-customer-name').value = c.name;
     document.getElementById('edit-customer-type').value = c.categoryId;
-    document.getElementById('edit-customer-city').value = c.city;
-    document.getElementById('edit-customer-phone').value = c.phone;
+    document.getElementById('edit-customer-city').value = c.city || '';
+    const addrEl = document.getElementById('edit-customer-address');
+    if (addrEl) addrEl.value = c.address || '';
+    document.getElementById('edit-customer-phone').value = c.phone || '';
     document.getElementById('edit-customer-limit').value = c.creditLimit;
     openModal('modal-edit-customer');
+}
+
+function openCustomerDetail(id) {
+    const c = CUSTOMERS.find(x => x.id === id);
+    if (!c) return;
+
+    const avatarEl = document.getElementById('detail-customer-avatar');
+    if (avatarEl) {
+        avatarEl.textContent = c.name.charAt(0);
+        avatarEl.className = 'entity-avatar blue';
+    }
+    
+    document.getElementById('detail-customer-name').textContent = c.name;
+    
+    const typeEl = document.getElementById('detail-customer-type');
+    if (typeEl) {
+        typeEl.textContent = c.type;
+    }
+
+    document.getElementById('detail-customer-id').textContent = c.id;
+    document.getElementById('detail-customer-city').textContent = c.city || '-';
+    document.getElementById('detail-customer-phone').textContent = c.phone || '-';
+    document.getElementById('detail-customer-address').textContent = c.address || 'Tidak ada alamat lengkap';
+
+    const sisa = c.sisaLimitPiutang ?? c.remainingLimit;
+    const totalSpent = c.totalBelanja ?? c.totalSpent;
+    const piutang = c.totalPiutangBerjalan ?? c.outstandingReceivables;
+    const limit = c.creditLimit;
+
+    document.getElementById('detail-customer-total-belanja').textContent = rp(totalSpent);
+    document.getElementById('detail-customer-piutang-berjalan').textContent = rp(piutang);
+    
+    const sisaEl = document.getElementById('detail-customer-sisa-limit');
+    let pctUsed = limit > 0 ? Math.min(100, Math.round(piutang / limit * 100)) : 0;
+    
+    let color = 'var(--rose-500)';
+    if (limit > 0) {
+        const pctRemaining = sisa / limit;
+        if (pctRemaining > 0.5) {
+            color = 'var(--emerald-600)';
+        } else if (pctRemaining > 0.1) {
+            color = 'var(--amber-500)';
+        }
+    } else {
+        color = 'var(--slate-400)';
+    }
+
+    if (sisaEl) {
+        sisaEl.textContent = rp(sisa);
+        sisaEl.style.color = color;
+    }
+
+    document.getElementById('detail-customer-limit-used-pct').textContent = `Limit terpakai ${pctUsed}%`;
+    document.getElementById('detail-customer-limit-total').textContent = rp(limit);
+
+    const progressBar = document.getElementById('detail-customer-progress-bar');
+    if (progressBar) {
+        progressBar.style.width = `${pctUsed}%`;
+        progressBar.style.background = color;
+    }
+
+    const editBtn = document.getElementById('detail-customer-edit-btn');
+    if (editBtn) {
+        editBtn.onclick = () => {
+            closeModal('modal-customer-detail');
+            openEditCustomerModal(id);
+        };
+    }
+
+    openModal('modal-customer-detail');
+    if (window.lucide) lucide.createIcons();
 }
 
 async function deleteCustomer(id) {
@@ -1788,9 +1907,10 @@ async function deleteCustomer(id) {
             headers: getAuthHeaders()
         });
         if (res.ok) {
+            showToast('Pelanggan berhasil dihapus!', 'success');
             fetchCustomers();
         } else {
-            alert('Gagal menghapus pelanggan');
+            showToast('Gagal menghapus pelanggan', 'error');
         }
     } catch (err) {
         console.error(err);
@@ -1817,7 +1937,6 @@ async function fetchVendors() {
             rekening: v.nomor_rek || '',
             pemilik: v.pemilik_rek || '',
             idNumber: String(v.id_number || ''),
-            npwp: String(v.npwp || ''),
             totalPurchases: parseFloat(v.total_purchases) || 0,
             debt: parseFloat(v.outstanding_debt) || parseFloat(v.debt) || 0
         }));
@@ -1849,9 +1968,8 @@ async function saveVendor(isEdit) {
         nama_bank: document.getElementById(`${prefix}-vendor-bank`)?.value || '',
         nomor_rek: document.getElementById(`${prefix}-vendor-rekening`)?.value || '',
         pemilik_rek: document.getElementById(`${prefix}-vendor-pemilik`)?.value || '',
-        // id_number field covers both NPWP and KTP (16-digit string)
-        id_number: String(document.getElementById(`${prefix}-vendor-idnumber`)?.value || '').trim(),
-        npwp: String(document.getElementById(`${prefix}-vendor-idnumber`)?.value || '').trim()
+        // id_number field: NPWP/KTP
+        id_number: String(document.getElementById(`${prefix}-vendor-idnumber`)?.value || '').trim()
     };
 
     const url = isEdit ? `/api/vendors/${id}` : '/api/vendors';
@@ -1899,7 +2017,6 @@ function openEditVendorModal(id) {
     if(document.getElementById('edit-vendor-rekening')) document.getElementById('edit-vendor-rekening').value = v.rekening || '';
     if(document.getElementById('edit-vendor-pemilik')) document.getElementById('edit-vendor-pemilik').value = v.pemilik || '';
     if(document.getElementById('edit-vendor-idnumber')) document.getElementById('edit-vendor-idnumber').value = String(v.idNumber || '');
-    if(document.getElementById('edit-vendor-npwp')) document.getElementById('edit-vendor-npwp').value = String(v.npwp || '');
     openModal('modal-edit-vendor');
 }
 
@@ -2182,7 +2299,7 @@ async function openEditPurchaseModal(id) {
     if (container) container.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 1rem; color: var(--gray-400);">Memuat data item...</td></tr>';
 
     try {
-        const res = await fetch(`/api/purchases/${id}/items`, { headers: getAuthHeaders() });
+        const res = await fetch(`/api/purchases/${encodeURIComponent(id)}/items`, { headers: getAuthHeaders() });
         if (res.ok) {
             editPurchaseItems = await res.json();
         } else {
@@ -2409,7 +2526,7 @@ async function openEditInvoiceModal(id) {
     if (container) container.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 1rem; color: var(--gray-400);">Memuat data item...</td></tr>';
     
     try {
-        const res = await fetch(`/api/invoices/${id}/items`, { headers: getAuthHeaders() });
+        const res = await fetch(`/api/invoices/${encodeURIComponent(id)}/items`, { headers: getAuthHeaders() });
         if (res.ok) {
             editInvoiceItems = await res.json();
         } else {
@@ -2449,7 +2566,7 @@ async function saveInvoiceEdits() {
     }
     
     try {
-        const res = await fetch(`/api/invoices/${id}`, {
+        const res = await fetch(`/api/invoices/${encodeURIComponent(id)}`, {
             method: 'PUT',
             headers: getAuthHeaders(),
             body: JSON.stringify({ 
@@ -2496,7 +2613,7 @@ async function confirmCancelInvoice() {
     const id = cancelInvoiceId || document.getElementById('edit-invoice-id')?.value;
     if (!id) return;
     try {
-        const res = await fetch(`/api/invoices/${id}/cancel`, {
+        const res = await fetch(`/api/invoices/${encodeURIComponent(id)}/cancel`, {
             method: 'PUT',
             headers: getAuthHeaders()
         });
@@ -2524,7 +2641,7 @@ async function confirmCancelPurchase() {
     const id = cancelPurchaseId || document.getElementById('edit-purchase-id')?.value;
     if (!id) return;
     try {
-        const res = await fetch(`/api/purchases/${id}/cancel`, {
+        const res = await fetch(`/api/purchases/${encodeURIComponent(id)}/cancel`, {
             method: 'PUT',
             headers: getAuthHeaders()
         });
@@ -2708,8 +2825,8 @@ async function submitPayment() {
 
     // FIX: use correct endpoints
     const url = isReceivable
-        ? `/api/finance/receivables/${id}/pay`
-        : `/api/finance/payables/${id}/pay`;
+        ? `/api/finance/receivables/${encodeURIComponent(id)}/pay`
+        : `/api/finance/payables/${encodeURIComponent(id)}/pay`;
 
     try {
         const res = await fetch(url, {

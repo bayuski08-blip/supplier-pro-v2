@@ -328,10 +328,10 @@ app.get('/api/products', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/products', authenticateToken, async (req, res) => {
-  const { id, sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id, badge } = req.body;
-  const insertQuery = 'INSERT INTO products (id, sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id, badge) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)';
+  const { id, sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id } = req.body;
+  const insertQuery = 'INSERT INTO products (id, sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)';
   try {
-    await pool.query(insertQuery, [id || 'P' + Date.now(), sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id || 'PU-1', badge]);
+    await pool.query(insertQuery, [id || 'P' + Date.now(), sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id || 'PU-1']);
     res.json({ success: true, message: 'Produk berhasil ditambahkan' });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -340,10 +340,10 @@ app.post('/api/products', authenticateToken, async (req, res) => {
 
 app.put('/api/products/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const { sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id, badge } = req.body;
-  const updateQuery = 'UPDATE products SET sku = $1, name = $2, category_id = $3, cost_price = $4, sell_price = $5, stock = $6, min_stock = $7, unit_id = $8, badge = $9 WHERE id = $10';
+  const { sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id } = req.body;
+  const updateQuery = 'UPDATE products SET sku = $1, name = $2, category_id = $3, cost_price = $4, sell_price = $5, stock = $6, min_stock = $7, unit_id = $8 WHERE id = $9';
   try {
-    const result = await pool.query(updateQuery, [sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id, badge, id]);
+    const result = await pool.query(updateQuery, [sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id, id]);
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Produk tidak ditemukan' });
     }
@@ -373,7 +373,7 @@ app.post('/api/stock-adjust', authenticateToken, async (req, res) => {
   if (!product_id || actual_stock === undefined || actual_stock === null) {
     return res.status(400).json({ error: 'product_id dan actual_stock wajib diisi' });
   }
-  const newStock = parseInt(actual_stock);
+  const newStock = parseFloat(actual_stock);
   if (isNaN(newStock) || newStock < 0) {
     return res.status(400).json({ error: 'actual_stock harus angka non-negatif' });
   }
@@ -385,7 +385,7 @@ app.post('/api/stock-adjust', authenticateToken, async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Produk tidak ditemukan' });
     }
-    const oldStock = parseInt(existing.rows[0].stock);
+    const oldStock = parseFloat(existing.rows[0].stock || 0);
     const productName = existing.rows[0].name;
     const costPrice = parseFloat(existing.rows[0].cost_price || 0);
 
@@ -416,14 +416,22 @@ app.post('/api/stock-adjust', authenticateToken, async (req, res) => {
 });
 
 // --- Customers Routes ---
+// Reusable calculated-fields query fragment
+const CUSTOMER_SELECT_SQL = `
+  SELECT
+    c.*,
+    cc.name AS category_name,
+    COALESCE(SUM(si.total) FILTER (WHERE si.status != 'Batal'), 0)                             AS total_belanja,
+    COALESCE(SUM(si.total - si.paid_amount) FILTER (WHERE si.status NOT IN ('Lunas','Batal')), 0) AS total_piutang_berjalan,
+    c.credit_lmt - COALESCE(SUM(si.total - si.paid_amount) FILTER (WHERE si.status NOT IN ('Lunas','Batal')), 0) AS sisa_limit_piutang
+  FROM customers c
+  LEFT JOIN customer_categories cc ON c.customer_category_id = cc.id
+  LEFT JOIN sales_invoices si ON si.customer_id = c.id
+`;
+
 app.get('/api/customers', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT c.*, cc.name as category_name
-      FROM customers c
-      LEFT JOIN customer_categories cc ON c.customer_category_id = cc.id
-      ORDER BY c.name ASC
-    `);
+    const result = await pool.query(CUSTOMER_SELECT_SQL + ' GROUP BY c.id, cc.name ORDER BY c.name ASC');
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -432,22 +440,43 @@ app.get('/api/customers', authenticateToken, async (req, res) => {
 
 app.get('/api/customers/search', authenticateToken, async (req, res) => {
   const { q } = req.query;
-  const query = `%${q}%`;
+  const pattern = `%${q || ''}%`;
   try {
-    const result = await pool.query('SELECT * FROM customers WHERE name LIKE $1 OR phone LIKE $2', [query, query]);
+    const result = await pool.query(
+      CUSTOMER_SELECT_SQL +
+      ` WHERE (c.name ILIKE $1 OR c.phone ILIKE $1 OR c.id ILIKE $1)
+        GROUP BY c.id, cc.name
+        ORDER BY c.name ASC
+        LIMIT 20`,
+      [pattern]
+    );
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
+app.get('/api/customers/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      CUSTOMER_SELECT_SQL + ' WHERE c.id = $1 GROUP BY c.id, cc.name',
+      [id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Pelanggan tidak ditemukan' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/customers', authenticateToken, async (req, res) => {
-  const { name, customer_category_id, phone, city, address, credit_lmt, id_number, npwp } = req.body;
-  const insertQuery = 'INSERT INTO customers (id, name, customer_category_id, phone, city, address, credit_lmt, id_number, npwp) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)';
+  const { name, customer_category_id, phone, city, address, credit_lmt } = req.body;
+  const insertQuery = 'INSERT INTO customers (id, name, customer_category_id, phone, city, address, credit_lmt) VALUES ($1, $2, $3, $4, $5, $6, $7)';
   try {
     const prefix = await getSetting('prefix_customer', 'C');
     const id = await generateNextId(pool, 'customers', prefix);
-    await pool.query(insertQuery, [id, name, customer_category_id, phone, city, address, credit_lmt, id_number, npwp]);
+    await pool.query(insertQuery, [id, name, customer_category_id, phone, city, address, credit_lmt]);
     res.json({ success: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -456,10 +485,10 @@ app.post('/api/customers', authenticateToken, async (req, res) => {
 
 app.put('/api/customers/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const { name, customer_category_id, phone, city, address, credit_lmt, id_number, npwp } = req.body;
-  const updateQuery = 'UPDATE customers SET name = $1, customer_category_id = $2, phone = $3, city = $4, address = $5, credit_lmt = $6, id_number = $7, npwp = $8 WHERE id = $9';
+  const { name, customer_category_id, phone, city, address, credit_lmt } = req.body;
+  const updateQuery = 'UPDATE customers SET name = $1, customer_category_id = $2, phone = $3, city = $4, address = $5, credit_lmt = $6 WHERE id = $7';
   try {
-    const result = await pool.query(updateQuery, [name, customer_category_id, phone, city, address, credit_lmt, id_number, npwp, id]);
+    const result = await pool.query(updateQuery, [name, customer_category_id, phone, city, address, credit_lmt, id]);
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Pelanggan tidak ditemukan' });
     }
@@ -763,7 +792,7 @@ app.patch('/api/finance/cash-flow/:id/cancel', authenticateToken, async (req, re
       }
     } else if (tx.category === 'Penyesuaian Stok') {
       // Reversal for stock opname
-      const match = tx.description.match(/Stock Opname: (.*?) \| Sebelum: (\d+) → Sesudah: (\d+)/);
+      const match = tx.description.match(/Stock Opname: (.*?) \| Sebelum: ([\d.]+) → Sesudah: ([\d.]+)/);
       if (match) {
         let productName = match[1].trim();
         let productId = null;
@@ -773,8 +802,8 @@ app.patch('/api/finance/cash-flow/:id/cancel', authenticateToken, async (req, re
           productName = idMatch[2];
         }
 
-        const oldStock = parseInt(match[2]);
-        const newStock = parseInt(match[3]);
+        const oldStock = parseFloat(match[2]);
+        const newStock = parseFloat(match[3]);
         const diff = newStock - oldStock; // Positive if stock increased, negative if decreased
 
         // Reverse the diff: subtract it from the current stock
@@ -974,14 +1003,14 @@ app.post('/api/finance/payables/:id/pay', authenticateToken, async (req, res) =>
 
 // --- Vendors Routes Extra CRUD ---
 app.post('/api/vendors', authenticateToken, async (req, res) => {
-  const { name, vendor_category_id, category_id, phone, city, address, id_number, npwp, nama_bank, nomor_rek, pemilik_rek } = req.body;
+  const { name, vendor_category_id, category_id, phone, city, address, id_number, nama_bank, nomor_rek, pemilik_rek } = req.body;
   const catId = vendor_category_id || category_id || 'VC-1';
   try {
     const prefix = await getSetting('prefix_vendor', 'V');
     const vId = await generateNextId(pool, 'vendors', prefix);
     await pool.query(
-      'INSERT INTO vendors (id, name, vendor_category_id, phone, city, address, id_number, npwp, nama_bank, nomor_rek, pemilik_rek) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
-      [vId, name, catId, phone, city, address, id_number, npwp, nama_bank, nomor_rek, pemilik_rek]
+      'INSERT INTO vendors (id, name, vendor_category_id, phone, city, address, id_number, nama_bank, nomor_rek, pemilik_rek) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+      [vId, name, catId, phone, city, address, id_number, nama_bank, nomor_rek, pemilik_rek]
     );
     res.json({ success: true, id: vId });
   } catch (err) {
@@ -991,12 +1020,12 @@ app.post('/api/vendors', authenticateToken, async (req, res) => {
 
 app.put('/api/vendors/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const { name, vendor_category_id, category_id, phone, city, address, id_number, npwp, nama_bank, nomor_rek, pemilik_rek } = req.body;
+  const { name, vendor_category_id, category_id, phone, city, address, id_number, nama_bank, nomor_rek, pemilik_rek } = req.body;
   const catId = vendor_category_id || category_id;
   try {
     const result = await pool.query(
-      'UPDATE vendors SET name = $1, vendor_category_id = $2, phone = $3, city = $4, address = $5, id_number = $6, npwp = $7, nama_bank = $8, nomor_rek = $9, pemilik_rek = $10 WHERE id = $11',
-      [name, catId, phone, city, address, id_number, npwp, nama_bank, nomor_rek, pemilik_rek, id]
+      'UPDATE vendors SET name = $1, vendor_category_id = $2, phone = $3, city = $4, address = $5, id_number = $6, nama_bank = $7, nomor_rek = $8, pemilik_rek = $9 WHERE id = $10',
+      [name, catId, phone, city, address, id_number, nama_bank, nomor_rek, pemilik_rek, id]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Vendor tidak ditemukan' });
     res.json({ success: true });
@@ -1063,7 +1092,7 @@ app.post('/api/purchases', authenticateToken, async (req, res) => {
       for (const item of items) {
         const itemId = 'POI-' + Date.now() + Math.floor(Math.random()*1000);
         const prodId = item.product_id || item.id;
-        const qty = parseInt(item.quantity || item.qty || 0);
+        const qty = parseFloat(item.quantity || item.qty || 0);
         const cost = parseFloat(item.cost || item.cost_price || item.price || 0);
         
         await client.query('INSERT INTO purchase_order_items (id, purchase_order_id, product_id, quantity, cost) VALUES ($1, $2, $3, $4, $5)', [itemId, poId, prodId, qty, cost]);
@@ -1112,7 +1141,7 @@ app.put('/api/purchases/:id', authenticateToken, async (req, res) => {
       for (const item of items) {
         const itemId = 'POI-' + Date.now() + Math.floor(Math.random()*1000);
         const prodId = item.product_id || item.id;
-        const qty = parseInt(item.quantity || item.qty || 0);
+        const qty = parseFloat(item.quantity || item.qty || 0);
         const cost = parseFloat(item.cost || item.cost_price || item.price || 0);
         
         await client.query('INSERT INTO purchase_order_items (id, purchase_order_id, product_id, quantity, cost) VALUES ($1, $2, $3, $4, $5)', [itemId, poId, prodId, qty, cost]);
@@ -1198,7 +1227,7 @@ app.put('/api/invoices/:id', authenticateToken, async (req, res) => {
       for (const item of items) {
         const itemId = 'IVI-' + Date.now() + Math.floor(Math.random()*1000);
         const prodId = item.product_id || item.id;
-        const qty = parseInt(item.quantity || item.qty || 0);
+        const qty = parseFloat(item.quantity || item.qty || 0);
         const price = parseFloat(item.price || item.sell_price || 0);
         
         await client.query('INSERT INTO invoice_items (id, invoice_id, product_id, quantity, price) VALUES ($1, $2, $3, $4, $5)', [itemId, invId, prodId, qty, price]);
@@ -1393,7 +1422,7 @@ app.get('/api/reports/insights', authenticateToken, async (req, res) => {
 app.post('/api/products/:id/stock-adjustment', authenticateToken, async (req, res) => {
   const prodId = req.params.id;
   const { actual_stock, reason } = req.body;
-  const finalActual = parseInt(actual_stock);
+  const finalActual = parseFloat(actual_stock);
   
   const client = await pool.connect();
   try {
@@ -1404,7 +1433,7 @@ app.post('/api/products/:id/stock-adjustment', authenticateToken, async (req, re
       return res.status(404).json({ error: 'Produk tidak ditemukan' });
     }
     
-    const systemStock = parseInt(prodRes.rows[0].stock || 0);
+    const systemStock = parseFloat(prodRes.rows[0].stock || 0);
     const diff = finalActual - systemStock;
     if (diff === 0) {
       await client.query('ROLLBACK');

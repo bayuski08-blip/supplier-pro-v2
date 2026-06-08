@@ -46,10 +46,9 @@ CREATE TABLE IF NOT EXISTS products (
   category_id VARCHAR(255) REFERENCES product_categories(id) ON DELETE SET NULL,
   cost_price NUMERIC DEFAULT 0,
   sell_price NUMERIC DEFAULT 0,
-  stock INTEGER DEFAULT 0,
-  min_stock INTEGER DEFAULT 0,
-  unit_id VARCHAR(255) REFERENCES product_units(id) ON DELETE SET NULL,
-  badge VARCHAR(255)
+  stock NUMERIC DEFAULT 0,
+  min_stock NUMERIC DEFAULT 0,
+  unit_id VARCHAR(255) REFERENCES product_units(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS customers (
@@ -59,8 +58,6 @@ CREATE TABLE IF NOT EXISTS customers (
   phone VARCHAR(255),
   city VARCHAR(255),
   address TEXT,
-  id_number VARCHAR(255),
-  npwp VARCHAR(255),
   credit_lmt NUMERIC DEFAULT 0
 );
 
@@ -72,7 +69,6 @@ CREATE TABLE IF NOT EXISTS vendors (
   city VARCHAR(255),
   address TEXT,
   id_number VARCHAR(255),
-  npwp VARCHAR(255),
   nama_bank VARCHAR(255),
   nomor_rek VARCHAR(255),
   pemilik_rek VARCHAR(255)
@@ -82,7 +78,7 @@ CREATE TABLE IF NOT EXISTS stock_adjustments (
   id VARCHAR(255) PRIMARY KEY,
   product_id VARCHAR(255) REFERENCES products(id) ON DELETE CASCADE,
   type VARCHAR(10) NOT NULL CHECK (type IN ('IN', 'OUT')),
-  quantity INTEGER NOT NULL,
+  quantity NUMERIC NOT NULL,
   reason TEXT,
   adjustment_date DATE DEFAULT CURRENT_DATE,
   user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
@@ -107,7 +103,7 @@ CREATE TABLE IF NOT EXISTS invoice_items (
   id VARCHAR(255) PRIMARY KEY,
   invoice_id VARCHAR(255) REFERENCES sales_invoices(id) ON DELETE CASCADE,
   product_id VARCHAR(255) REFERENCES products(id) ON DELETE SET NULL,
-  quantity INTEGER NOT NULL,
+  quantity NUMERIC NOT NULL,
   price NUMERIC NOT NULL
 );
 
@@ -126,7 +122,7 @@ CREATE TABLE IF NOT EXISTS purchase_order_items (
   id VARCHAR(255) PRIMARY KEY,
   purchase_order_id VARCHAR(255) REFERENCES purchase_orders(id) ON DELETE CASCADE,
   product_id VARCHAR(255) REFERENCES products(id) ON DELETE SET NULL,
-  quantity INTEGER NOT NULL,
+  quantity NUMERIC NOT NULL,
   cost NUMERIC NOT NULL
 );
 

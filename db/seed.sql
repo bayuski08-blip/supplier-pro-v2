@@ -16,47 +16,47 @@ ON CONFLICT (username) DO NOTHING;
 SELECT setval('users_id_seq', (SELECT COALESCE(MAX(id), 1) FROM users));
 
 -- Products (dengan kolom FK unit_id dan category_id)
-INSERT INTO products (id, sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id, badge) 
+INSERT INTO products (id, sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id) 
 VALUES 
-  ('P001', 'MNM-001', 'Kopi Arabica 250g', 'PC-1', 45000, 68000, 124, 20, 'PU-1', 'Best Seller'),
-  ('P002', 'MNM-002', 'Teh Celup Premium 25s', 'PC-1', 12000, 18500, 230, 50, 'PU-2', NULL),
-  ('P003', 'MNM-003', 'Sirup Rasa Buah 1L', 'PC-1', 22000, 35000, 67, 15, 'PU-3', NULL),
-  ('P004', 'MKN-001', 'Mie Instan Goreng (dus)', 'PC-2', 92000, 115000, 45, 10, 'PU-4', NULL),
-  ('P005', 'MKN-002', 'Biskuit Kaleng 350g', 'PC-2', 28000, 42000, 89, 20, 'PU-1', NULL),
-  ('P006', 'MKN-003', 'Wafer Coklat 12x21g', 'PC-2', 18000, 27000, 156, 30, 'PU-5', NULL),
-  ('P007', 'SMB-001', 'Beras Premium 5kg', 'PC-3', 62000, 78000, 8, 15, 'PU-6', 'Hampir Habis'),
-  ('P008', 'SMB-002', 'Gula Pasir 1kg', 'PC-3', 14000, 18000, 12, 25, 'PU-7', NULL),
-  ('P009', 'SMB-003', 'Minyak Goreng 2L', 'PC-3', 28000, 36000, 5, 10, 'PU-3', 'Hampir Habis'),
-  ('P010', 'MNM-004', 'Susu UHT 1L (karton)', 'PC-1', 155000, 195000, 32, 10, 'PU-8', NULL),
-  ('P011', 'MKN-004', 'Sarden Kaleng 155g', 'PC-2', 11000, 16500, 78, 20, 'PU-1', NULL),
-  ('P012', 'LNY-001', 'Sabun Cuci Piring 750ml', 'PC-4', 8500, 13000, 140, 30, 'PU-3', NULL),
-  ('P013', 'LNY-002', 'Tisu Wajah 250s', 'PC-4', 12000, 18000, 95, 20, 'PU-5', NULL),
-  ('P014', 'SMB-004', 'Tepung Terigu 1kg', 'PC-3', 10000, 14500, 18, 20, 'PU-7', NULL),
-  ('P015', 'MNM-005', 'Air Mineral 600ml (dus)', 'PC-1', 38000, 52000, 200, 30, 'PU-4', NULL),
-  ('P016', 'MKN-005', 'Kecap Manis 600ml', 'PC-2', 15000, 22000, 62, 15, 'PU-3', NULL)
+  ('P001', 'MNM-001', 'Kopi Arabica 250g', 'PC-1', 45000, 68000, 124, 20, 'PU-1'),
+  ('P002', 'MNM-002', 'Teh Celup Premium 25s', 'PC-1', 12000, 18500, 230, 50, 'PU-2'),
+  ('P003', 'MNM-003', 'Sirup Rasa Buah 1L', 'PC-1', 22000, 35000, 67, 15, 'PU-3'),
+  ('P004', 'MKN-001', 'Mie Instan Goreng (dus)', 'PC-2', 92000, 115000, 45, 10, 'PU-4'),
+  ('P005', 'MKN-002', 'Biskuit Kaleng 350g', 'PC-2', 28000, 42000, 89, 20, 'PU-1'),
+  ('P006', 'MKN-003', 'Wafer Coklat 12x21g', 'PC-2', 18000, 27000, 156, 30, 'PU-5'),
+  ('P007', 'SMB-001', 'Beras Premium 5kg', 'PC-3', 62000, 78000, 8, 15, 'PU-6'),
+  ('P008', 'SMB-002', 'Gula Pasir 1kg', 'PC-3', 14000, 18000, 12, 25, 'PU-7'),
+  ('P009', 'SMB-003', 'Minyak Goreng 2L', 'PC-3', 28000, 36000, 5, 10, 'PU-3'),
+  ('P010', 'MNM-004', 'Susu UHT 1L (karton)', 'PC-1', 155000, 195000, 32, 10, 'PU-8'),
+  ('P011', 'MKN-004', 'Sarden Kaleng 155g', 'PC-2', 11000, 16500, 78, 20, 'PU-1'),
+  ('P012', 'LNY-001', 'Sabun Cuci Piring 750ml', 'PC-4', 8500, 13000, 140, 30, 'PU-3'),
+  ('P013', 'LNY-002', 'Tisu Wajah 250s', 'PC-4', 12000, 18000, 95, 20, 'PU-5'),
+  ('P014', 'SMB-004', 'Tepung Terigu 1kg', 'PC-3', 10000, 14500, 18, 20, 'PU-7'),
+  ('P015', 'MNM-005', 'Air Mineral 600ml (dus)', 'PC-1', 38000, 52000, 200, 30, 'PU-4'),
+  ('P016', 'MKN-005', 'Kecap Manis 600ml', 'PC-2', 15000, 22000, 62, 15, 'PU-3')
 ON CONFLICT (id) DO NOTHING;
 
 -- Customers (menggunakan address dan FK customer_category_id)
-INSERT INTO customers (id, name, customer_category_id, phone, city, address, credit_lmt, id_number, npwp) 
+INSERT INTO customers (id, name, customer_category_id, phone, city, address, credit_lmt) 
 VALUES 
-  ('C0001', 'Toko Berkah Jaya', 'CC-1', '0812-3456-7001', 'Surabaya', 'Jl. Diponegoro No 45, Surabaya', 15000000, '3578012345678901', '01.234.567.8-001.000'),
-  ('C0002', 'Warung Sari Rasa', 'CC-2', '0813-2345-6002', 'Malang', 'Jl. Ijen No 12, Malang', 5000000, '3573019876543210', NULL),
-  ('C0003', 'Kafe Nusantara', 'CC-3', '0821-4567-8003', 'Surabaya', 'Jl. Basuki Rahmat No 88, Surabaya', 20000000, '3578024567890123', '02.345.678.9-002.000'),
-  ('C0004', 'Toko Makmur Sentosa', 'CC-4', '0852-6789-0004', 'Sidoarjo', 'Jl. Pahlawan No 30, Sidoarjo', 10000000, '3515031234567890', NULL),
-  ('C0005', 'Warung Makan Bu Diah', 'CC-2', '0896-1234-5005', 'Gresik', 'Jl. Veteran No 5, Gresik', 3000000, '3525049876543210', NULL),
-  ('C0006', 'Minimarket Jaya Abadi', 'CC-1', '0811-9876-5006', 'Surabaya', 'Jl. Ahmad Yani No 100, Surabaya', 25000000, '3578056789012345', '03.456.789.0-003.000'),
-  ('C0007', 'Kedai Kopi Pagi', 'CC-3', '0857-6543-2007', 'Malang', 'Jl. Kawi No 7, Malang', 8000000, '3573068901234567', NULL),
-  ('C0008', 'Toko Sembako Ibu Rina', 'CC-4', '0878-3210-9008', 'Mojokerto', 'Jl. Majapahit No 22, Mojokerto', 7000000, '3576079012345678', NULL)
+  ('C0001', 'Toko Berkah Jaya', 'CC-1', '0812-3456-7001', 'Surabaya', 'Jl. Diponegoro No 45, Surabaya', 15000000),
+  ('C0002', 'Warung Sari Rasa', 'CC-2', '0813-2345-6002', 'Malang', 'Jl. Ijen No 12, Malang', 5000000),
+  ('C0003', 'Kafe Nusantara', 'CC-3', '0821-4567-8003', 'Surabaya', 'Jl. Basuki Rahmat No 88, Surabaya', 20000000),
+  ('C0004', 'Toko Makmur Sentosa', 'CC-4', '0852-6789-0004', 'Sidoarjo', 'Jl. Pahlawan No 30, Sidoarjo', 10000000),
+  ('C0005', 'Warung Makan Bu Diah', 'CC-2', '0896-1234-5005', 'Gresik', 'Jl. Veteran No 5, Gresik', 3000000),
+  ('C0006', 'Minimarket Jaya Abadi', 'CC-1', '0811-9876-5006', 'Surabaya', 'Jl. Ahmad Yani No 100, Surabaya', 25000000),
+  ('C0007', 'Kedai Kopi Pagi', 'CC-3', '0857-6543-2007', 'Malang', 'Jl. Kawi No 7, Malang', 8000000),
+  ('C0008', 'Toko Sembako Ibu Rina', 'CC-4', '0878-3210-9008', 'Mojokerto', 'Jl. Majapahit No 22, Mojokerto', 7000000)
 ON CONFLICT (id) DO NOTHING;
 
 -- Vendors (menggunakan FK vendor_category_id)
-INSERT INTO vendors (id, name, vendor_category_id, phone, city, id_number) 
+INSERT INTO vendors (id, name, vendor_category_id, phone, city, address, id_number, nama_bank, nomor_rek, pemilik_rek) 
 VALUES 
-  ('V0001', 'PT Sumber Minuman Nusantara', 'VC-1', '021-5556-7890', 'Jakarta', '3171011234567890'),
-  ('V0002', 'CV Pangan Makmur', 'VC-2', '031-7778-9012', 'Surabaya', '3578022345678901'),
-  ('V0003', 'UD Sembako Sentosa', 'VC-3', '031-3334-5678', 'Sidoarjo', '3515033456789012'),
-  ('V0004', 'PT Kopi Nusantara', 'VC-1', '0341-445-6789', 'Malang', '3573044567890123'),
-  ('V0005', 'CV Bersih Sempurna', 'VC-4', '021-2223-4567', 'Jakarta', '3171055678901234')
+  ('V0001', 'PT Sumber Minuman Nusantara', 'VC-1', '021-5556-7890', 'Jakarta', 'Jl. Sudirman No 45, Jakarta', '3171011234567890', 'BCA', '1234567890', 'PT Sumber Minuman Nusantara'),
+  ('V0002', 'CV Pangan Makmur', 'VC-2', '031-7778-9012', 'Surabaya', 'Jl. Raya Darmo No 12, Surabaya', '3578022345678901', 'Mandiri', '0987654321', 'CV Pangan Makmur'),
+  ('V0003', 'UD Sembako Sentosa', 'VC-3', '031-3334-5678', 'Sidoarjo', 'Jl. Pahlawan No 8, Sidoarjo', '3515033456789012', 'BRI', '1122334455', 'UD Sembako Sentosa'),
+  ('V0004', 'PT Kopi Nusantara', 'VC-1', '0341-445-6789', 'Malang', 'Jl. Ijen No 30, Malang', '3573044567890123', 'BNI', '5566778899', 'PT Kopi Nusantara'),
+  ('V0005', 'CV Bersih Sempurna', 'VC-4', '021-2223-4567', 'Jakarta', 'Jl. Gatot Subroto No 77, Jakarta', '3171055678901234', 'BCA', '9988776655', 'CV Bersih Sempurna')
 ON CONFLICT (id) DO NOTHING;
 
 -- Sales Invoices (menggunakan payment_type_id)

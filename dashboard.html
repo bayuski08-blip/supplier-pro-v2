@@ -391,7 +391,7 @@
                         <button class="btn-toolbar secondary" id="btn-export-customers">
                             <i data-lucide="download"></i> Export
                         </button>
-                        <button class="btn-toolbar primary" onclick="openModal('modal-add-customer')">
+                        <button class="btn-toolbar primary" onclick="openAddCustomerModal()">
                             <i data-lucide="user-plus"></i> Tambah Pelanggan
                         </button>
                     </div>
@@ -410,6 +410,8 @@
                                     <th>Kota</th>
                                     <th>Telepon / WA</th>
                                     <th>Limit Piutang</th>
+                                    <th>Sisa Limit Piutang</th>
+                                    <th>Total Belanja</th>
                                     <th style="text-align: right;">Aksi</th>
                                 </tr>
                             </thead>
@@ -1259,6 +1261,10 @@
                     <input type="text" id="add-customer-city" class="form-input" placeholder="Surabaya">
                 </div>
             </div>
+            <div class="form-group">
+                <label>Alamat Lengkap</label>
+                <textarea id="add-customer-address" class="form-input" placeholder="Alamat lengkap pelanggan" rows="2"></textarea>
+            </div>
             <div class="form-row">
                 <div class="form-group">
                     <label>WhatsApp / Telepon</label>
@@ -1309,6 +1315,10 @@
                     <input type="text" id="edit-customer-city" class="form-input">
                 </div>
             </div>
+            <div class="form-group">
+                <label>Alamat Lengkap</label>
+                <textarea id="edit-customer-address" class="form-input" rows="2"></textarea>
+            </div>
             <div class="form-row">
                 <div class="form-group">
                     <label>WhatsApp / Telepon</label>
@@ -1323,6 +1333,73 @@
         <div class="modal-footer">
             <button class="btn-toolbar secondary" onclick="closeModal('modal-edit-customer')">Batal</button>
             <button class="btn-toolbar primary" onclick="saveCustomer(true)"><i data-lucide="save"></i> Simpan Perubahan</button>
+        </div>
+    </div>
+</div>
+
+<!-- Customer Detail Modal -->
+<div class="modal-overlay" id="modal-customer-detail">
+    <div class="modal" style="max-width: 500px;">
+        <div class="modal-header">
+            <h3>Detail Pelanggan</h3>
+            <button class="modal-close" onclick="closeModal('modal-customer-detail')"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+            <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+                <div class="entity-avatar blue" id="detail-customer-avatar" style="width: 50px; height: 50px; font-size: 1.5rem; display: flex; align-items: center; justify-content: center; font-weight: 700; border-radius: 50%;">C</div>
+                <div>
+                    <h4 id="detail-customer-name" style="margin: 0; font-size: 1.25rem; font-weight: 700; color: var(--gray-800);"></h4>
+                    <span id="detail-customer-type" class="badge-status aman" style="margin-top: 0.25rem; display: inline-block;"></span>
+                </div>
+            </div>
+            
+            <div class="entity-details" style="display: grid; grid-template-columns: 1fr; gap: 0.75rem; margin-bottom: 1.5rem; border-top: 1px solid var(--gray-200); border-bottom: 1px solid var(--gray-200); padding: 1rem 0;">
+                <div class="entity-detail" style="display: flex; justify-content: space-between; font-size: 0.875rem;">
+                    <span class="entity-detail-label" style="color: var(--gray-500);">ID Pelanggan</span>
+                    <span class="entity-detail-value" id="detail-customer-id" style="font-weight: 600;"></span>
+                </div>
+                <div class="entity-detail" style="display: flex; justify-content: space-between; font-size: 0.875rem;">
+                    <span class="entity-detail-label" style="color: var(--gray-500);">Kota</span>
+                    <span class="entity-detail-value" id="detail-customer-city"></span>
+                </div>
+                <div class="entity-detail" style="display: flex; justify-content: space-between; font-size: 0.875rem;">
+                    <span class="entity-detail-label" style="color: var(--gray-500);">Telepon / WA</span>
+                    <span class="entity-detail-value" id="detail-customer-phone"></span>
+                </div>
+                <div class="entity-detail" style="display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.875rem;">
+                    <span class="entity-detail-label" style="color: var(--gray-500);">Alamat Lengkap</span>
+                    <span class="entity-detail-value" id="detail-customer-address" style="line-height: 1.4; color: var(--gray-700);"></span>
+                </div>
+            </div>
+
+            <div style="background: var(--gray-50); border-radius: 0.75rem; padding: 1rem; margin-bottom: 1rem;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.875rem;">
+                    <span style="color: var(--gray-500);">Total Belanja</span>
+                    <span id="detail-customer-total-belanja" style="font-weight: 700; color: var(--gray-800);"></span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.875rem;">
+                    <span style="color: var(--gray-500);">Piutang Berjalan</span>
+                    <span id="detail-customer-piutang-berjalan" style="font-weight: 700; color: var(--rose-600);"></span>
+                </div>
+            </div>
+
+            <div style="margin-top: 1.25rem; border: 1px solid var(--gray-200); border-radius: 0.75rem; padding: 1rem;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.875rem; color: var(--gray-600); margin-bottom: 0.5rem;">
+                    <span>Sisa Limit Piutang:</span>
+                    <span id="detail-customer-sisa-limit" style="font-weight: 700;"></span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--gray-500); margin-bottom: 0.5rem;">
+                    <span id="detail-customer-limit-used-pct">Limit terpakai 0%</span>
+                    <span>Limit Total: <strong id="detail-customer-limit-total"></strong></span>
+                </div>
+                <div style="background: var(--gray-200); border-radius: 99px; height: 8px; overflow: hidden;">
+                    <div id="detail-customer-progress-bar" style="height: 100%; width: 0%; border-radius: 99px; transition: width .4s;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-toolbar secondary" onclick="closeModal('modal-customer-detail')">Tutup</button>
+            <button class="btn-toolbar primary" id="detail-customer-edit-btn"><i data-lucide="edit-2"></i> Edit Pelanggan</button>
         </div>
     </div>
 </div>
