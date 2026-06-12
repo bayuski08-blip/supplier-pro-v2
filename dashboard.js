@@ -842,6 +842,8 @@ function renderInvoices(filter = '') {
 
     tbody.innerHTML = filtered.map(inv => {
         const statusLower = (inv.status || '').toLowerCase();
+        // Normalize status to single-word CSS class (e.g. 'Belum Bayar' → 'belum')
+        const statusClass = statusLower.includes('belum') ? 'belum' : statusLower.replace(/\s+/g, '-');
         return `
         <tr>
             <td style="font-weight:600; color: var(--blue-600);">${inv.id}</td>
@@ -850,7 +852,7 @@ function renderInvoices(filter = '') {
             <td style="font-weight:700;">${rp(inv.total)}</td>
             <td>${rp(inv.paid)}</td>
             <td>${inv.type}</td>
-            <td><span class="badge-status ${statusLower}">${capitalize(inv.status || 'belum')}</span></td>
+            <td><span class="badge-status ${statusClass}">${capitalize(inv.status || 'Belum Bayar')}</span></td>
             <td style="text-align: right; white-space: nowrap;">
                 <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;" title="Print Preview" onclick="openModal('modal-print-invoice')">
                     <i data-lucide="printer" style="width: 14px; height: 14px; margin: 0;"></i>
@@ -876,9 +878,10 @@ function renderPiutang(filter = '') {
         filter = sel ? sel.value : 'all';
     }
     // Summary
-    const piutangInvoices = INVOICES.filter(i => i.status.toLowerCase() !== 'lunas');
+    const piutangInvoices = INVOICES.filter(i => !['lunas', 'batal'].includes(i.status.toLowerCase()));
     const totalPiutang = piutangInvoices.reduce((s, i) => s + (i.total - i.paid), 0);
-    const belumBayar = INVOICES.filter(i => i.status.toLowerCase() === 'belum').reduce((s, i) => s + i.total, 0);
+    // Backend stores 'Belum Bayar' (not 'belum') — match with includes() to handle both formats
+    const belumBayar = INVOICES.filter(i => i.status.toLowerCase().includes('belum')).reduce((s, i) => s + i.total, 0);
     const sebagian = INVOICES.filter(i => i.status.toLowerCase() === 'sebagian').reduce((s, i) => s + (i.total - i.paid), 0);
 
     document.getElementById('piutang-summary').innerHTML = `
@@ -899,9 +902,12 @@ function renderPiutang(filter = '') {
     // Table
     const tbody = document.getElementById('piutang-body');
     // Show all invoices that are not "Lunas" or "Batal"
-    let filtered = INVOICES.filter(i => i.status.toLowerCase() !== 'lunas' && i.status.toLowerCase() !== 'batal');
+    let filtered = INVOICES.filter(i => !['lunas', 'batal'].includes(i.status.toLowerCase()));
     if (filter && filter !== 'all') {
-        filtered = filtered.filter(i => i.status.toLowerCase() === filter);
+        // 'belum' filter matches both 'Belum Bayar' and legacy 'belum' statuses
+        filtered = filtered.filter(i => filter === 'belum'
+            ? i.status.toLowerCase().includes('belum')
+            : i.status.toLowerCase() === filter);
     }
     const searchEl = document.getElementById('piutang-search');
     if (searchEl && searchEl.value) {
@@ -922,7 +928,7 @@ function renderPiutang(filter = '') {
                 <td>${rp(inv.paid)}</td>
                 <td style="font-weight:700; color: ${sisa > 0 ? 'var(--rose-500)' : 'var(--emerald-500)'}">${rp(sisa)}</td>
                 <td>${inv.dueDate}</td>
-                <td><span class="badge-status ${inv.status.toLowerCase()}">${capitalize(inv.status)}</span></td>
+                <td><span class="badge-status ${inv.status.toLowerCase().includes('belum') ? 'belum' : inv.status.toLowerCase().replace(/\s+/g, '-')}">${capitalize(inv.status)}</span></td>
                 <td>${inv.status.toLowerCase() !== 'lunas' ? `<button class="btn-toolbar primary" style="padding:0.3rem 0.65rem; font-size:0.75rem;" onclick="openPiutangPaymentModal('${inv.id}', ${sisa})">Input Bayar</button>` : '—'}</td>
             </tr>
         `;
@@ -1035,6 +1041,7 @@ function renderCashFlow(filter = '') {
             <td><span class="badge-status ${t.category === 'Penjualan' || t.category === 'Piutang' ? 'lunas' : 'tempo'}">${t.category}</span></td>
             <td><span class="badge-status ${t.type.toLowerCase()}">${t.type === 'IN' ? '↑ Masuk' : '↓ Keluar'}</span></td>
             <td style="font-weight:700; color: ${t.type === 'IN' ? 'var(--emerald-500)' : 'var(--rose-500)'};">${t.type === 'IN' ? '+' : '-'}${rp(t.amount)}</td>
+            <td><span class="badge-status ${t.status === 'cancelled' ? 'batal' : 'lunas'}">${t.status === 'cancelled' ? 'Dibatalkan' : 'Aktif'}</span></td>
             <td>${t.method}</td>
             <td style="text-align:right; white-space:nowrap;">${actionBtns}</td>
         </tr>
@@ -1398,6 +1405,7 @@ async function renderReports() {
 // ---------- POS / Kasir ----------
 let cart = [];
 let currentPpnRate = 11;
+let selectedCartPaymentTypeId = 'PT-1';
 
 function renderPOSProducts(searchTerm = '', category = '') {
     const grid = document.getElementById('pos-product-grid');
@@ -1542,6 +1550,14 @@ document.querySelectorAll('.cart-payment-btn').forEach(btn => {
     });
 });
 
+// Keep track of currently selected payment method
+document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'cart-payment-type') {
+        selectedCartPaymentTypeId = e.target.value;
+        console.log(`[Frontend State] Payment method changed to: ${selectedCartPaymentTypeId}`);
+    }
+});
+
 // Checkout
 document.getElementById('btn-checkout')?.addEventListener('click', async () => {
     if (cart.length === 0) return;
@@ -1553,22 +1569,32 @@ document.getElementById('btn-checkout')?.addEventListener('click', async () => {
     }
     
     const paymentTypeSelect = document.getElementById('cart-payment-type');
-    const payment_type_id = paymentTypeSelect ? paymentTypeSelect.value : 'PT-1';
-    const payTypeName = getPaymentTypeName(paymentTypeSelect).toLowerCase();
-    // Let's deduce payTypeStr from payment_type_id or payTypeName to know if it's Tempo/Credit
-    let payTypeStr = 'tunai';
-    if (payment_type_id === 'PT-2' || payTypeName.includes('tempo') || payTypeName.includes('credit')) {
-        payTypeStr = 'tempo';
+    if (paymentTypeSelect) {
+        selectedCartPaymentTypeId = paymentTypeSelect.value;
     }
+    const payment_type_id = selectedCartPaymentTypeId;
+
+    // Guard: payment type must be selected
+    if (!payment_type_id) {
+        showToast('Pilih metode pembayaran terlebih dahulu.', 'warning');
+        return;
+    }
+
+    // Detect payment behaviour by name (not hardcoded PT-2 ID)
+    const payTypeName = getPaymentTypeName(paymentTypeSelect).toLowerCase();
+    // Tempo/credit = deferred payment (paid=0 on creation)
+    const isTempo = payTypeName.includes('tempo') || payTypeName.includes('credit');
+    // Transfer = full immediate payment (same as Tunai for amount purposes)
+    // Tunai = full immediate payment
     
     const subtotal = cart.reduce((s, c) => s + c.price * c.qty, 0);
     const ppnAmount = subtotal * (currentPpnRate / 100);
     const total = subtotal + ppnAmount;
     
-    let paid = total;
-    if (payTypeStr === 'tempo') {
-        paid = 0;
-    }
+    // Tempo/credit: no upfront payment; all other methods (Tunai, Transfer, etc.) = full paid
+    const paid = isTempo ? 0 : total;
+    
+    console.log(`[Checkout] payment_type_id=${payment_type_id} | name=${payTypeName} | isTempo=${isTempo} | paid=${paid} | total=${total}`);
     
     const payload = {
         customer_id: customerId,
@@ -1582,6 +1608,8 @@ document.getElementById('btn-checkout')?.addEventListener('click', async () => {
             price: item.price
         }))
     };
+    
+    console.log(`[Checkout Submission] Submitting checkout payload to backend:`, JSON.stringify(payload, null, 2));
     
     try {
         const res = await fetch('/api/invoices', {
@@ -1599,6 +1627,7 @@ document.getElementById('btn-checkout')?.addEventListener('click', async () => {
             cart = [];
             document.getElementById('pos-customer-id').value = '';
             document.getElementById('pos-customer-search').value = '';
+            selectedCartPaymentTypeId = 'PT-1';
             document.getElementById('cart-payment-type').value = 'PT-1';
             
             renderCart();
@@ -1665,6 +1694,24 @@ function populateCustomerSelect(filter = '') {
             item.style.backgroundColor = 'transparent';
         });
     });
+}
+
+/**
+ * Quick-select "Pelanggan Umum" walk-in customer for POS checkout.
+ * Searches CUSTOMERS array for a record whose name includes 'umum',
+ * then fills both the visible search input and the hidden ID field.
+ */
+function selectUmumCustomer() {
+    const umum = CUSTOMERS.find(c => c.name && c.name.toLowerCase().includes('umum'));
+    if (!umum) {
+        showToast('Pelanggan Umum belum terdaftar. Silakan tambahkan di menu Pelanggan.', 'warning');
+        return;
+    }
+    document.getElementById('pos-customer-search').value = umum.name;
+    document.getElementById('pos-customer-id').value = umum.id;
+    const dropdown = document.getElementById('pos-customer-dropdown');
+    if (dropdown) dropdown.style.display = 'none';
+    console.log(`[POS] Pelanggan Umum selected: ${umum.name} (${umum.id})`);
 }
 
 // POS Customer Search bindings
@@ -1801,6 +1848,22 @@ async function init() {
     renderInvoices();
     renderPiutang();
     renderHutang();
+    
+    // Dynamically populate year filters to ensure current year is always available
+    const currentYear = new Date().getFullYear();
+    ['filter-tahun', 'balance-filter-tahun', 'reports-filter-tahun'].forEach(id => {
+        const select = document.getElementById(id);
+        if (select) {
+            select.innerHTML = '';
+            for (let y = currentYear + 1; y >= currentYear - 5; y--) {
+                const opt = document.createElement('option');
+                opt.value = y;
+                opt.textContent = y;
+                select.appendChild(opt);
+            }
+        }
+    });
+
     renderCashFlow();
     renderProfitLoss();
 
@@ -2317,7 +2380,7 @@ async function deleteVendor(id) {
 
 async function fetchPurchases() {
     try {
-        const res = await fetch('/api/purchases', { headers: getAuthHeaders() });
+        const res = await fetch(`/api/purchases?_t=${Date.now()}`, { headers: getAuthHeaders() });
         const data = await res.json();
         PURCHASES = data;
         renderPurchases();
@@ -2501,7 +2564,7 @@ window.addEditPurchaseItem = () => {
     
     const existing = editPurchaseItems.find(i => i.product_id === prod.id);
     if (existing) {
-        existing.quantity += 1;
+        existing.quantity = (parseFloat(existing.quantity) || 0) + 1;
     } else {
         editPurchaseItems.push({
             product_id: prod.id,
@@ -2575,7 +2638,7 @@ async function openEditPurchaseModal(id) {
     if (container) container.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 1rem; color: var(--gray-400);">Memuat data item...</td></tr>';
 
     try {
-        const res = await fetch(`/api/purchases/${encodeURIComponent(id)}/items`, { headers: getAuthHeaders() });
+        const res = await fetch(`/api/purchases/${encodeURIComponent(id)}/items?_t=${Date.now()}`, { headers: getAuthHeaders() });
         if (res.ok) {
             editPurchaseItems = await res.json();
         } else {
@@ -2664,8 +2727,8 @@ async function savePurchase(isEdit) {
 
 async function fetchInvoices() {
     try {
-        // FIX: correct endpoint is /api/invoices not /api/sales
-        const res = await fetch('/api/invoices', { headers: getAuthHeaders() });
+        // FIX: correct endpoint is /api/invoices not /api/sales; cache buster prevents stale data after checkout
+        const res = await fetch(`/api/invoices?_t=${Date.now()}`, { headers: getAuthHeaders() });
         const data = await res.json();
         INVOICES = data;
         renderInvoices();
@@ -3278,6 +3341,13 @@ async function populateMasterDropdowns() {
         const custCats = await fetchAndFill('/api/master/customer-categories', ['add-customer-type', 'edit-customer-type'], 'id', 'name');
         await fetchAndFill('/api/master/vendor-categories', ['add-vendor-category', 'edit-vendor-category'], 'id', 'name');
         await fetchAndFill('/api/master/payment-types', ['cart-payment-type', 'add-purchase-payment-type', 'edit-purchase-payment-type', 'edit-invoice-payment-type', 'payment-method', 'manual-invoice-payment-type'], 'id', 'name');
+        
+        // Restore cart payment type from frontend state variable
+        const cartPaymentTypeSelect = document.getElementById('cart-payment-type');
+        if (cartPaymentTypeSelect) {
+            cartPaymentTypeSelect.value = selectedCartPaymentTypeId;
+            console.log('[Frontend State] Restored #cart-payment-type select value to: ' + selectedCartPaymentTypeId);
+        }
 
         // Populate Product Category Filter
         const prodCatFilter = document.getElementById('product-category-filter');

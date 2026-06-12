@@ -713,8 +713,16 @@ app.get('/api/purchases/:id/items', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/invoices', authenticateToken, async (req, res) => {
+  console.log(`[Invoice Creation API] Request received:`, JSON.stringify(req.body, null, 2));
   const { customer_id, total, paid, payment_type_id, due_date, items } = req.body;
   const userId = req.user.id;
+
+  // Server-side input validation — never let an empty string reach the FK constraint
+  if (!customer_id) return res.status(400).json({ error: 'customer_id wajib diisi' });
+  if (!payment_type_id) return res.status(400).json({ error: 'payment_type_id wajib diisi. Pilih metode pembayaran yang valid.' });
+  if (!items || !Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'Invoice harus memiliki minimal satu item produk.' });
+
+  console.log(`[Invoice Creation API] Selected Payment Type ID: "${payment_type_id}"`);
 
   const insertInvoiceQuery = 'INSERT INTO sales_invoices (id, date, customer_id, total, paid_amount, payment_type_id, due_date, status, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)';
   const updateStockQuery = 'UPDATE products SET stock = stock - $1 WHERE id = $2';
@@ -727,6 +735,8 @@ app.post('/api/invoices', authenticateToken, async (req, res) => {
     await client.query('BEGIN');
     const prefix = await getSetting('prefix_sales', 'INV/{YYYY}/{MM}/');
     const id = await generateNextId(client, 'sales_invoices', prefix);
+    
+    console.log(`[Invoice Creation API] Saving invoice ${id} with payment_type_id: "${payment_type_id}"`);
     await client.query(insertInvoiceQuery, [id, date, customer_id, total, paid, payment_type_id, due_date, status, userId]);
 
     // Reduce stock
@@ -746,12 +756,15 @@ app.post('/api/invoices', authenticateToken, async (req, res) => {
       const ptNameRes = await client.query('SELECT name FROM payment_types WHERE id = $1', [payment_type_id]);
       const method = ptNameRes.rows[0]?.name || 'Transfer Bank';
       const cashCategory = paid >= total ? 'Penjualan' : 'Pelunasan Piutang';
+      console.log(`[Invoice Creation API] Creating cash transaction for invoice ${id}. Paid: ${paid}, payment_type_id: "${payment_type_id}", method name: "${method}"`);
       await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, invoice_id, payment_type_id, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)', [ctId, ctDate, 'IN', cashCategory, `Pembayaran Invoice ${id}`, paid, method, id, payment_type_id, userId]);
     }
 
     await client.query('COMMIT');
+    console.log(`[Invoice Creation API] Successfully created and committed invoice: ${id}`);
     res.json({ success: true, invoiceId: id });
   } catch (err) {
+    console.error(`[Invoice Creation API] Error during invoice creation rollback:`, err);
     await client.query('ROLLBACK');
     res.status(400).json({ error: err.message });
   } finally {
@@ -972,56 +985,70 @@ app.patch('/api/finance/cash-flow/:id/cancel', authenticateToken, async (req, re
 
 // --- Laba Rugi Endpoint ---
 app.get('/api/laporan/laba-rugi', authenticateToken, async (req, res) => {
-  const bulan = parseInt(req.query.bulan);
-  const tahun = parseInt(req.query.tahun);
+  const bulan = parseInt(req.query.bulan, 10);
+  const tahun = parseInt(req.query.tahun, 10);
 
-  if (!bulan || !tahun) {
-    return res.status(400).json({ error: 'Parameter bulan dan tahun diperlukan' });
+  console.log(`[Laba Rugi] Request params: bulan="${req.query.bulan}" tahun="${req.query.tahun}" → parsed: bulan=${bulan} tahun=${tahun}`);
+
+  if (isNaN(bulan) || isNaN(tahun) || bulan < 1 || bulan > 12 || tahun < 2000 || tahun > 2100) {
+    console.warn(`[Laba Rugi] Invalid params rejected: bulan=${bulan} tahun=${tahun}`);
+    return res.status(400).json({ success: false, error: 'Parameter bulan (1-12) dan tahun (2000-2100) harus berupa angka valid' });
   }
 
   const client = await pool.connect();
   try {
+    // Compute start_date and end_date — same approach as /neraca and /performa
+    const dateRes = await client.query(`
+      SELECT
+        MAKE_DATE($1::int, $2::int, 1) AS start_date,
+        (DATE_TRUNC('month', MAKE_DATE($1::int, $2::int, 1)) + INTERVAL '1 month' - INTERVAL '1 day')::DATE AS end_date
+    `, [tahun, bulan]);
+    const { start_date, end_date } = dateRes.rows[0];
+
+    console.log(`[Laba Rugi] Date range resolved: ${start_date} → ${end_date}`);
+
     // 1. PENDAPATAN (Penjualan kotor & diskon)
-    // Extract sales_invoices matching month/year and status != 'Dibatalkan'
+    // Use BETWEEN with computed dates; exclude both 'Batal' AND legacy 'Dibatalkan' statuses
     const resPendapatan = await client.query(`
-      SELECT SUM(total) as kotor, SUM(discount) as diskon 
-      FROM sales_invoices 
-      WHERE EXTRACT(MONTH FROM date::DATE) = $1 
-        AND EXTRACT(YEAR FROM date::DATE) = $2 
-        AND status != 'Dibatalkan'
-    `, [bulan, tahun]);
+      SELECT
+        COALESCE(SUM(total), 0) AS kotor,
+        COALESCE(SUM(COALESCE(discount, 0)), 0) AS diskon
+      FROM sales_invoices
+      WHERE date::TIMESTAMPTZ::DATE BETWEEN $1 AND $2
+        AND status NOT IN ('Batal', 'Dibatalkan')
+    `, [start_date, end_date]);
 
     const penjualanKotor = parseFloat(resPendapatan.rows[0]?.kotor || 0);
     const diskon = parseFloat(resPendapatan.rows[0]?.diskon || 0);
     const penjualanBersih = penjualanKotor - diskon;
 
-    // 2. HPP (Pembelian)
-    // From purchase_orders where status = 'Selesai'
+    console.log(`[Laba Rugi] Pendapatan: kotor=${penjualanKotor} diskon=${diskon} bersih=${penjualanBersih}`);
+
+    // 2. HPP (Pembelian selesai dalam periode)
     const resHPP = await client.query(`
-      SELECT SUM(total) as hpp 
-      FROM purchase_orders 
-      WHERE EXTRACT(MONTH FROM date::DATE) = $1 
-        AND EXTRACT(YEAR FROM date::DATE) = $2 
+      SELECT COALESCE(SUM(total), 0) AS hpp
+      FROM purchase_orders
+      WHERE date::TIMESTAMPTZ::DATE BETWEEN $1 AND $2
         AND status = 'Selesai'
-    `, [bulan, tahun]);
+    `, [start_date, end_date]);
     const hpp = parseFloat(resHPP.rows[0]?.hpp || 0);
     const labaKotor = penjualanBersih - hpp;
 
-    // 3. BEBAN OPERASIONAL (Cash transactions OUT, category Operasional/Gaji/Sewa, no invoice/PO)
-    // Exclude 'Pembelian Stok' and 'Penyesuaian Stok'
+    console.log(`[Laba Rugi] HPP=${hpp} LabaKotor=${labaKotor}`);
+
+    // 3. BEBAN OPERASIONAL
+    // cash_transactions.date is DATE type so no cast needed
     const resBeban = await client.query(`
-      SELECT category, SUM(amount) as total 
-      FROM cash_transactions 
-      WHERE type = 'OUT' 
+      SELECT category, COALESCE(SUM(amount), 0) AS total
+      FROM cash_transactions
+      WHERE type = 'OUT'
         AND (status IS NULL OR status != 'cancelled')
-        AND invoice_id IS NULL 
+        AND invoice_id IS NULL
         AND purchase_order_id IS NULL
-        AND category != 'Pembelian Stok'
-        AND category != 'Penyesuaian Stok'
-        AND EXTRACT(MONTH FROM date) = $1 
-        AND EXTRACT(YEAR FROM date) = $2
+        AND category NOT IN ('Pembelian Stok', 'Penyesuaian Stok')
+        AND date BETWEEN $1 AND $2
       GROUP BY category
-    `, [bulan, tahun]);
+    `, [start_date, end_date]);
 
     const rincianBeban = resBeban.rows.map(r => ({
       category: r.category,
@@ -1030,16 +1057,17 @@ app.get('/api/laporan/laba-rugi', authenticateToken, async (req, res) => {
     const totalBebanOperasional = rincianBeban.reduce((sum, item) => sum + item.total, 0);
     const labaOperasional = labaKotor - totalBebanOperasional;
 
+    console.log(`[Laba Rugi] BebanOperasional=${totalBebanOperasional} LabaOperasional=${labaOperasional}`);
+
     // 4. PENYESUAIAN STOK
     const resStok = await client.query(`
-      SELECT type, SUM(amount) as total
+      SELECT type, COALESCE(SUM(amount), 0) AS total
       FROM cash_transactions
       WHERE category = 'Penyesuaian Stok'
         AND (status IS NULL OR status != 'cancelled')
-        AND EXTRACT(MONTH FROM date) = $1
-        AND EXTRACT(YEAR FROM date) = $2
+        AND date BETWEEN $1 AND $2
       GROUP BY type
-    `, [bulan, tahun]);
+    `, [start_date, end_date]);
 
     let penyesuaianStokMasuk = 0;
     let penyesuaianStokKeluar = 0;
@@ -1050,25 +1078,25 @@ app.get('/api/laporan/laba-rugi', authenticateToken, async (req, res) => {
     const netPenyesuaianStok = penyesuaianStokMasuk - penyesuaianStokKeluar;
 
     // 5. PENDAPATAN LAIN-LAIN
-    // From cash transactions IN, category != 'Penjualan' AND category != 'Penyesuaian Stok'
     const resLain = await client.query(`
-      SELECT SUM(amount) as total 
-      FROM cash_transactions 
-      WHERE type = 'IN' 
+      SELECT COALESCE(SUM(amount), 0) AS total
+      FROM cash_transactions
+      WHERE type = 'IN'
         AND (status IS NULL OR status != 'cancelled')
-        AND category != 'Penjualan'
-        AND category != 'Penyesuaian Stok'
-        AND EXTRACT(MONTH FROM date) = $1 
-        AND EXTRACT(YEAR FROM date) = $2
-    `, [bulan, tahun]);
+        AND category NOT IN ('Penjualan', 'Penyesuaian Stok', 'Pelunasan Piutang')
+        AND date BETWEEN $1 AND $2
+    `, [start_date, end_date]);
     const pendapatanLain = parseFloat(resLain.rows[0]?.total || 0);
 
     // LABA BERSIH
     const labaBersih = labaOperasional + netPenyesuaianStok + pendapatanLain;
 
+    console.log(`[Laba Rugi] PendapatanLain=${pendapatanLain} LabaBersih=${labaBersih}`);
+
     res.json({
       success: true,
       data: {
+        periode: { bulan, tahun, start_date, end_date },
         pendapatan: {
           kotor: penjualanKotor,
           diskon: diskon,
@@ -1092,19 +1120,22 @@ app.get('/api/laporan/laba-rugi', authenticateToken, async (req, res) => {
     });
 
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(`[Laba Rugi] Query error:`, err);
+    res.status(500).json({ success: false, error: err.message });
   } finally {
     client.release();
   }
 });
-
 // --- Laporan Neraca ---
 app.get('/api/laporan/neraca', authenticateToken, async (req, res) => {
-  const bulan = parseInt(req.query.bulan);
-  const tahun = parseInt(req.query.tahun);
+  const bulan = parseInt(req.query.bulan, 10);
+  const tahun = parseInt(req.query.tahun, 10);
 
-  if (!bulan || !tahun) {
-    return res.status(400).json({ success: false, error: 'Parameter bulan dan tahun diperlukan' });
+  console.log(`[Neraca] Request params: bulan="${req.query.bulan}" tahun="${req.query.tahun}" → parsed: bulan=${bulan} tahun=${tahun}`);
+
+  if (isNaN(bulan) || isNaN(tahun) || bulan < 1 || bulan > 12 || tahun < 2000 || tahun > 2100) {
+    console.warn(`[Neraca] Invalid params rejected: bulan=${bulan} tahun=${tahun}`);
+    return res.status(400).json({ success: false, error: 'Parameter bulan (1-12) dan tahun (2000-2100) harus berupa angka valid' });
   }
 
   const client = await pool.connect();
@@ -1209,11 +1240,14 @@ app.get('/api/laporan/neraca', authenticateToken, async (req, res) => {
 
 // --- Laporan Analisis Performa ---
 app.get('/api/laporan/performa', authenticateToken, async (req, res) => {
-  const bulan = parseInt(req.query.bulan);
-  const tahun = parseInt(req.query.tahun);
+  const bulan = parseInt(req.query.bulan, 10);
+  const tahun = parseInt(req.query.tahun, 10);
 
-  if (!bulan || !tahun) {
-    return res.status(400).json({ success: false, error: 'Parameter bulan dan tahun diperlukan' });
+  console.log(`[Performa] Request params: bulan="${req.query.bulan}" tahun="${req.query.tahun}" → parsed: bulan=${bulan} tahun=${tahun}`);
+
+  if (isNaN(bulan) || isNaN(tahun) || bulan < 1 || bulan > 12 || tahun < 2000 || tahun > 2100) {
+    console.warn(`[Performa] Invalid params rejected: bulan=${bulan} tahun=${tahun}`);
+    return res.status(400).json({ success: false, error: 'Parameter bulan (1-12) dan tahun (2000-2100) harus berupa angka valid' });
   }
 
   const client = await pool.connect();
@@ -1515,6 +1549,9 @@ app.put('/api/purchases/:id', authenticateToken, async (req, res) => {
   const finalTotal = parseFloat(total || 0);
   const status = finalPaid >= finalTotal ? 'Selesai' : 'Dalam Proses';
   const poDate = date || new Date().toISOString().split('T')[0];
+
+  console.log(`[PO Edit API] Request received for PO: ${poId}`);
+  console.log(`[PO Edit API] Payload items:`, JSON.stringify(items, null, 2));
 
   const client = await pool.connect();
   try {
@@ -1909,6 +1946,32 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
 app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'login.html'));
 });
+
+// Auto-seed: ensure "Pelanggan Umum" walk-in customer always exists
+(async () => {
+  try {
+    const existing = await pool.query(`SELECT id FROM customers WHERE name = 'Pelanggan Umum' LIMIT 1`);
+    if (existing.rows.length === 0) {
+      // Find next customer ID
+      const lastId = await pool.query(`SELECT id FROM customers ORDER BY id DESC LIMIT 1`);
+      let nextNum = 1;
+      if (lastId.rows.length > 0) {
+        const match = lastId.rows[0].id.match(/(\d+)$/);
+        if (match) nextNum = parseInt(match[1], 10) + 1;
+      }
+      const newId = 'C' + String(nextNum).padStart(6, '0');
+      await pool.query(
+        `INSERT INTO customers (id, name, phone, city, address) VALUES ($1, $2, $3, $4, $5)`,
+        [newId, 'Pelanggan Umum', '-', '-', '-']
+      );
+      console.log(`[Seed] Pelanggan Umum created with id: ${newId}`);
+    } else {
+      console.log(`[Seed] Pelanggan Umum already exists: ${existing.rows[0].id}`);
+    }
+  } catch (err) {
+    console.error('[Seed] Failed to seed Pelanggan Umum:', err.message);
+  }
+})();
 
 app.listen(port, () => {
   console.log(`SupplierPro API running at http://localhost:${port}`);
