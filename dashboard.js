@@ -88,24 +88,11 @@ let PURCHASES = [];
 let CASH_TRANSACTIONS = [];
 let USERS = [];
 
-// Sales data for chart (last 7 days)
-const SALES_CHART_DATA = [
-    { label: '28 Mei', value: 17700000 },
-    { label: '29 Mei', value: 5200000 },
-    { label: '30 Mei', value: 2800000 },
-    { label: '31 Mei', value: 2100000 },
-    { label: '1 Jun', value: 4650000 },
-    { label: '2 Jun', value: 12950000 },
-    { label: '3 Jun', value: 2850000 },
-];
+// Sales data for chart (dynamic)
+let SALES_CHART_DATA = [];
 
-// Donut chart data
-const DONUT_DATA = [
-    { label: 'Minuman', value: 38, color: '#3b82f6' },
-    { label: 'Makanan', value: 27, color: '#10b981' },
-    { label: 'Sembako', value: 22, color: '#f59e0b' },
-    { label: 'Lainnya', value: 13, color: '#8b5cf6' },
-];
+// Donut chart data (dynamic)
+let DONUT_DATA = [];
 
 // Page title mapping
 const PAGE_TITLES = {
@@ -176,6 +163,42 @@ document.getElementById('sidebar-overlay').addEventListener('click', () => {
 // ---------- Modal Helpers ----------
 function openModal(id) {
     document.getElementById(id).classList.add('active');
+    if (id === 'modal-add-product') {
+        const skuEl = document.getElementById('add-product-sku');
+        const nameEl = document.getElementById('add-product-name');
+        const priceEl = document.getElementById('add-product-price');
+        const costEl = document.getElementById('add-product-cost');
+        const stockEl = document.getElementById('add-product-stock');
+        const minStockEl = document.getElementById('add-product-minstock');
+        
+        if (skuEl) skuEl.value = '';
+        if (nameEl) nameEl.value = '';
+        if (priceEl) priceEl.value = '';
+        if (costEl) costEl.value = '';
+        if (stockEl) stockEl.value = '';
+        if (minStockEl) minStockEl.value = '';
+    } else if (id === 'modal-manual-invoice') {
+        const invId = document.getElementById('manual-invoice-id');
+        const custSearch = document.getElementById('manual-invoice-customer-search');
+        const custVal = document.getElementById('manual-invoice-customer');
+        const totalEl = document.getElementById('manual-invoice-total');
+        const methodEl = document.getElementById('manual-invoice-payment-method');
+        const dateEl = document.getElementById('manual-invoice-date');
+        const duedateEl = document.getElementById('manual-invoice-duedate');
+        const dropdown = document.getElementById('manual-invoice-customer-dropdown');
+        
+        if (invId) invId.value = '';
+        if (custSearch) custSearch.value = '';
+        if (custVal) custVal.value = '';
+        if (totalEl) totalEl.value = '';
+        if (methodEl) methodEl.value = '';
+        if (dateEl) dateEl.value = '';
+        if (duedateEl) duedateEl.value = '';
+        if (dropdown) {
+            dropdown.style.display = 'none';
+            dropdown.innerHTML = '';
+        }
+    }
 }
 
 function closeModal(id) {
@@ -203,6 +226,85 @@ async function fetchDashboardSummary() {
     } catch (err) {
         console.error('Failed to fetch dashboard summary', err);
     }
+}
+
+async function fetchSalesTrend(days = 7) {
+    try {
+        const res = await fetch(`/api/dashboard/sales-trend?days=${days}`, { headers: getAuthHeaders() });
+        if (res.ok) {
+            SALES_CHART_DATA = await res.json();
+        }
+    } catch (err) {
+        console.error('Failed to fetch sales trend', err);
+    }
+}
+
+async function fetchSalesComposition(days = 30) {
+    try {
+        const res = await fetch(`/api/dashboard/sales-composition?days=${days}`, { headers: getAuthHeaders() });
+        if (res.ok) {
+            DONUT_DATA = await res.json();
+        }
+    } catch (err) {
+        console.error('Failed to fetch sales composition', err);
+    }
+}
+
+let currentTrendDays = 7;
+let currentCompositionDays = 30;
+
+async function refreshCharts() {
+    await Promise.all([
+        fetchSalesTrend(currentTrendDays),
+        fetchSalesComposition(currentCompositionDays)
+    ]);
+    renderSalesChart();
+    renderDonutChart();
+}
+
+async function handleChartDaysChange(days) {
+    // Show loading states
+    const chart = document.getElementById('sales-chart');
+    if (chart) {
+        chart.innerHTML = '<div style="display:flex; justify-content:center; align-items:center; height:200px; width:100%; color:var(--gray-400);">Memuat data...</div>';
+    }
+    const donutWrapper = document.getElementById('donut-chart');
+    if (donutWrapper) {
+        donutWrapper.innerHTML = '<div style="display:flex; justify-content:center; align-items:center; height:140px; width:100%; color:var(--gray-400); font-size:0.875rem;">Memuat data...</div>';
+    }
+
+    // Toggle active classes on the buttons
+    const trendButtons = document.querySelectorAll('#page-dashboard .dash-card-actions button');
+    trendButtons.forEach(btn => {
+        const isTarget = btn.textContent.includes(String(days));
+        if (isTarget) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+
+    // Update title
+    const titleEl = document.querySelector('#page-dashboard .dash-card:first-child .dash-card-title');
+    if (titleEl) {
+        titleEl.textContent = `Penjualan ${days} Hari Terakhir`;
+    }
+
+    currentTrendDays = days;
+    currentCompositionDays = days;
+
+    await refreshCharts();
+}
+
+function setupChartListeners() {
+    const trendButtons = document.querySelectorAll('#page-dashboard .dash-card-actions button');
+    trendButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const is30d = btn.textContent.includes('30');
+            const days = is30d ? 30 : 7;
+            handleChartDaysChange(days);
+        });
+    });
 }
 
 function renderDashboard() {
@@ -253,15 +355,35 @@ function renderSummaryCards() {
 
 
 function renderSalesChart() {
-    const maxVal = Math.max(...SALES_CHART_DATA.map(d => d.value));
     const chart = document.getElementById('sales-chart');
+    if (!chart) return;
+
+    if (!SALES_CHART_DATA || SALES_CHART_DATA.length === 0) {
+        chart.innerHTML = '<div style="display:flex; justify-content:center; align-items:center; height:200px; width:100%; color:var(--gray-400);">Belum ada data penjualan</div>';
+        return;
+    }
+
+    const maxVal = Math.max(...SALES_CHART_DATA.map(d => d.total_penjualan), 0);
+    const INDO_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'];
+
+    const formatIndonesianDate = (dateStr) => {
+        if (!dateStr) return '';
+        const parts = dateStr.split('-');
+        if (parts.length < 3) return dateStr;
+        const day = parseInt(parts[2], 10);
+        const monthIdx = parseInt(parts[1], 10) - 1;
+        const monthName = INDO_MONTHS[monthIdx] || '';
+        return `${day} ${monthName}`;
+    };
+
     chart.innerHTML = SALES_CHART_DATA.map(d => {
-        const h = Math.max((d.value / maxVal) * 200, 8);
+        const h = maxVal > 0 ? Math.max((d.total_penjualan / maxVal) * 200, 8) : 8;
+        const label = formatIndonesianDate(d.tanggal);
         return `
             <div class="chart-bar-col">
-                <div class="chart-bar-value">${rpShort(d.value)}</div>
-                <div class="chart-bar" style="height: ${h}px;"></div>
-                <div class="chart-bar-label">${d.label}</div>
+                <div class="chart-bar-value" title="${rp(d.total_penjualan)}">${rpShort(d.total_penjualan)}</div>
+                <div class="chart-bar" style="height: ${h}px;" title="Total: ${rp(d.total_penjualan)}&#10;Transaksi: ${d.jumlah_transaksi}"></div>
+                <div class="chart-bar-label">${label}</div>
             </div>
         `;
     }).join('');
@@ -269,13 +391,47 @@ function renderSalesChart() {
 
 function renderDonutChart() {
     const wrapper = document.getElementById('donut-chart');
-    const total = DONUT_DATA.reduce((s, d) => s + d.value, 0);
+    if (!wrapper) return;
+
+    if (!DONUT_DATA || DONUT_DATA.length === 0) {
+        wrapper.innerHTML = '<div style="display:flex; justify-content:center; align-items:center; height:140px; width:100%; color:var(--gray-400); font-size:0.875rem;">Belum ada data penjualan</div>';
+        return;
+    }
+
+    const CATEGORY_COLORS = {
+        'Minuman': '#3b82f6',
+        'Makanan': '#10b981',
+        'Sembako': '#f59e0b',
+        'Lainnya': '#8b5cf6'
+    };
+    const FALLBACK_COLORS = ['#ec4899', '#06b6d4', '#f43f5e', '#14b8a6', '#64748b'];
+
+    let fallbackIdx = 0;
+    const chartData = DONUT_DATA.map(d => {
+        let color = CATEGORY_COLORS[d.kategori];
+        if (!color) {
+            color = FALLBACK_COLORS[fallbackIdx % FALLBACK_COLORS.length];
+            fallbackIdx++;
+        }
+        return {
+            label: d.kategori,
+            value: d.persentase,
+            color: color
+        };
+    });
+
+    const total = chartData.reduce((s, d) => s + d.value, 0);
+    if (total === 0) {
+        wrapper.innerHTML = '<div style="display:flex; justify-content:center; align-items:center; height:140px; width:100%; color:var(--gray-400); font-size:0.875rem;">Belum ada data penjualan</div>';
+        return;
+    }
+
     let cumulative = 0;
     const radius = 52;
     const circumference = 2 * Math.PI * radius;
 
     let circles = '';
-    DONUT_DATA.forEach(d => {
+    chartData.forEach(d => {
         const dashLength = (d.value / total) * circumference;
         const dashOffset = -(cumulative / total) * circumference;
         circles += `<circle cx="70" cy="70" r="${radius}" fill="none" stroke="${d.color}" stroke-width="16" 
@@ -286,7 +442,7 @@ function renderDonutChart() {
     });
 
     const svg = `<svg class="donut-svg" viewBox="0 0 140 140">${circles}</svg>`;
-    const legend = DONUT_DATA.map(d => `
+    const legend = chartData.map(d => `
         <div class="donut-legend-item">
             <span class="donut-legend-dot" style="background: ${d.color};"></span>
             <span>${d.label}</span>
@@ -314,7 +470,7 @@ function renderLowStock() {
     const tbody = document.getElementById('low-stock-body');
     tbody.innerHTML = lowStock.map(p => `
         <tr>
-            <td style="font-weight: 600;">${p.emoji} ${p.name}</td>
+            <td style="font-weight: 600;">${p.name}</td>
             <td style="font-weight: 700; color: var(--rose-500);">${p.stock}</td>
             <td>${p.minStock}</td>
             <td><span class="badge-status rendah">Rendah</span></td>
@@ -334,7 +490,7 @@ function renderProducts(filter = '', category = '') {
         const q = filter.toLowerCase();
         filtered = filtered.filter(p => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q));
     }
-    if (category) {
+    if (category && category !== 'all') {
         filtered = filtered.filter(p => p.category === category);
     }
 
@@ -344,7 +500,7 @@ function renderProducts(filter = '', category = '') {
         return `
             <tr>
                 <td><code style="background:var(--gray-100); padding:2px 6px; border-radius:4px; font-size:0.78rem;">${p.sku}</code></td>
-                <td style="font-weight:600;">${p.emoji} ${p.name}</td>
+                <td style="font-weight:600;">${p.name}</td>
                 <td>${p.category}</td>
                 <td>${rp(p.cost)}</td>
                 <td style="font-weight:700;">${rp(p.price)}</td>
@@ -391,7 +547,7 @@ function renderCustomers(filter = '', type = '') {
         const q = filter.toLowerCase();
         filtered = filtered.filter(c => c.name.toLowerCase().includes(q) || c.city.toLowerCase().includes(q) || c.id.toLowerCase().includes(q));
     }
-    if (type) {
+    if (type && type !== 'all') {
         filtered = filtered.filter(c => c.type === type);
     }
 
@@ -1027,113 +1183,216 @@ async function renderProfitLoss() {
 }
 
 // ---------- Balance Sheet Page ----------
-function renderBalance() {
-    const kas = 15850000;
-    const piutang = 19250000;
-    const persediaan = PRODUCTS.reduce((s, p) => s + p.cost * p.stock, 0);
-    const totalAset = kas + piutang + persediaan;
+async function renderBalance() {
+    const bulanSelect = document.getElementById('balance-filter-bulan');
+    const tahunSelect = document.getElementById('balance-filter-tahun');
 
-    const hutangUsaha = 25200000;
-    const hutangLain = 0;
-    const totalLiabilitas = hutangUsaha + hutangLain;
+    // Set default to current month/year on first load
+    if (!bulanSelect.value) {
+        const today = new Date();
+        bulanSelect.value = today.getMonth() + 1;
+        tahunSelect.value = today.getFullYear();
+    }
 
-    const ekuitas = totalAset - totalLiabilitas;
+    const bulan = bulanSelect.value;
+    const tahun = tahunSelect.value;
 
     const content = document.getElementById('balance-content');
-    content.innerHTML = `
-        <div class="finance-breakdown">
-            <div class="finance-breakdown-header"><h3>Aset</h3></div>
-            <div class="finance-breakdown-row"><span class="fb-label"><strong>Aset Lancar</strong></span><span class="fb-value"></span></div>
-            <div class="finance-breakdown-row indent"><span class="fb-label">Kas & Bank</span><span class="fb-value">${rp(kas)}</span></div>
-            <div class="finance-breakdown-row indent"><span class="fb-label">Piutang Usaha</span><span class="fb-value">${rp(piutang)}</span></div>
-            <div class="finance-breakdown-row indent"><span class="fb-label">Persediaan Barang</span><span class="fb-value">${rp(persediaan)}</span></div>
-            <div class="finance-breakdown-row total"><span class="fb-label">Total Aset</span><span class="fb-value"><strong>${rp(totalAset)}</strong></span></div>
-        </div>
-        <div>
-            <div class="finance-breakdown" style="margin-bottom: 1.25rem;">
-                <div class="finance-breakdown-header"><h3>Liabilitas</h3></div>
-                <div class="finance-breakdown-row"><span class="fb-label"><strong>Kewajiban Lancar</strong></span><span class="fb-value"></span></div>
-                <div class="finance-breakdown-row indent"><span class="fb-label">Hutang Usaha</span><span class="fb-value">${rp(hutangUsaha)}</span></div>
-                <div class="finance-breakdown-row indent"><span class="fb-label">Hutang Lain-lain</span><span class="fb-value">${rp(hutangLain)}</span></div>
-                <div class="finance-breakdown-row total"><span class="fb-label">Total Liabilitas</span><span class="fb-value"><strong>${rp(totalLiabilitas)}</strong></span></div>
+    const periodEl = document.getElementById('balance-report-period');
+    const statusEl = document.getElementById('balance-status-indicator');
+
+    if (content) content.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:2rem; color:var(--gray-400);">Memuat data neraca...</div>`;
+    if (statusEl) statusEl.style.display = 'none';
+
+    try {
+        const res = await fetch(`/api/laporan/neraca?bulan=${bulan}&tahun=${tahun}`, {
+            headers: getAuthHeaders()
+        });
+        const dataRes = await res.json();
+
+        if (!dataRes.success) throw new Error(dataRes.error || 'Gagal memuat data neraca');
+
+        const d = dataRes.data;
+
+        if (periodEl) periodEl.innerText = d.per_tanggal;
+
+        const rowStyle = 'display:flex; justify-content:space-between; align-items:center; padding:1rem 0; border-bottom:1px solid var(--gray-100); font-size:0.9rem;';
+        const lastRowStyle = 'display:flex; justify-content:space-between; align-items:center; padding:1rem 0; font-size:0.9rem;';
+        const totalRowStyle = 'display:flex; justify-content:space-between; align-items:center; padding:1.1rem 0; margin-top:0.5rem; border-top:2px solid var(--gray-200); font-weight:700; font-size:1rem;';
+        const sectionTitleStyle = 'font-weight:700; color:var(--indigo-600); margin-bottom:1.25rem; text-transform:uppercase; letter-spacing:0.06em; font-size:0.85rem;';
+        const subTitleStyle = 'font-weight:600; color:var(--gray-500); margin:1.25rem 0 0.25rem 0; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.05em;';
+        const cardStyle = 'background:white; border-radius:12px; border:1px solid var(--gray-200); padding:1.75rem;';
+        const grandTotalStyle = 'display:flex; justify-content:space-between; align-items:center; padding:1.1rem 0; margin-top:1.25rem; border-top:2px solid var(--gray-300); font-weight:700; font-size:1.05rem;';
+
+        content.innerHTML = `
+            <!-- ASET -->
+            <div style="${cardStyle}">
+                <div style="${sectionTitleStyle}">Aset</div>
+
+                <div style="${subTitleStyle}">Aset Lancar</div>
+                <div style="${rowStyle}"><span>Kas &amp; Bank</span><span>${rp(d.aset.kas_bank)}</span></div>
+                <div style="${rowStyle}"><span>Piutang Usaha</span><span>${rp(d.aset.piutang_usaha)}</span></div>
+                <div style="${lastRowStyle}"><span>Persediaan Barang</span><span>${rp(d.aset.persediaan)}</span></div>
+
+                <div style="${totalRowStyle}"><span>Total Aset</span><span style="color:var(--indigo-600);">${rp(d.aset.total)}</span></div>
             </div>
-            <div class="finance-breakdown">
-                <div class="finance-breakdown-header"><h3>Ekuitas</h3></div>
-                <div class="finance-breakdown-row"><span class="fb-label">Modal Pemilik</span><span class="fb-value">${rp(ekuitas - 950000)}</span></div>
-                <div class="finance-breakdown-row"><span class="fb-label">Laba Ditahan</span><span class="fb-value">${rp(950000)}</span></div>
-                <div class="finance-breakdown-row profit"><span class="fb-label"><strong>Total Ekuitas</strong></span><span class="fb-value"><strong>${rp(ekuitas)}</strong></span></div>
+
+            <!-- LIABILITAS & EKUITAS -->
+            <div style="display:flex; flex-direction:column; gap:1.25rem;">
+                <div style="${cardStyle}">
+                    <div style="${sectionTitleStyle}">Liabilitas</div>
+                    <div style="${subTitleStyle}">Kewajiban Lancar</div>
+                    <div style="${rowStyle}"><span>Hutang Usaha</span><span>${rp(d.liabilitas.hutang_usaha)}</span></div>
+                    <div style="${lastRowStyle}"><span>Hutang Lain-lain</span><span>${rp(d.liabilitas.hutang_lain)}</span></div>
+                    <div style="${totalRowStyle}"><span>Total Liabilitas</span><span>${rp(d.liabilitas.total)}</span></div>
+                </div>
+
+                <div style="${cardStyle}">
+                    <div style="${sectionTitleStyle}">Ekuitas</div>
+                    <div style="${rowStyle}"><span>Modal Pemilik</span><span>${rp(d.ekuitas.modal_pemilik)}</span></div>
+                    <div style="${lastRowStyle}"><span>Laba Ditahan</span><span style="color:${d.ekuitas.laba_ditahan >= 0 ? 'var(--emerald-600)' : 'var(--rose-600)'}">${rp(d.ekuitas.laba_ditahan)}</span></div>
+                    <div style="${totalRowStyle}"><span>Total Ekuitas</span><span>${rp(d.ekuitas.total)}</span></div>
+
+                    <div style="${grandTotalStyle}">
+                        <span>Total Liabilitas &amp; Ekuitas</span>
+                        <span style="color:var(--indigo-600);">${rp(d.total_liabilitas_ekuitas)}</span>
+                    </div>
+                </div>
             </div>
-        </div>
-    `;
+        `;
+
+        // Balance status indicator
+        if (statusEl) {
+            statusEl.style.display = 'flex';
+            if (d.is_balanced) {
+                statusEl.style.background = 'var(--emerald-50)';
+                statusEl.style.color = 'var(--emerald-700)';
+                statusEl.style.border = '1px solid var(--emerald-200)';
+                statusEl.innerHTML = `<i data-lucide="check-circle"></i> Neraca Seimbang — Total Aset = Total Liabilitas &amp; Ekuitas`;
+            } else {
+                statusEl.style.background = 'var(--rose-50)';
+                statusEl.style.color = 'var(--rose-700)';
+                statusEl.style.border = '1px solid var(--rose-200)';
+                statusEl.innerHTML = `<i data-lucide="alert-triangle"></i> Neraca Tidak Seimbang — Periksa kembali data transaksi`;
+            }
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+    } catch (err) {
+        console.error('renderBalance error:', err);
+        if (content) content.innerHTML = `<div style="grid-column:1/-1; text-align:center; padding:2rem; color:var(--rose-500);">Gagal memuat data: ${err.message}</div>`;
+    }
 }
 
 // ---------- Reports Page ----------
-function renderReports() {
-    // Insight cards
-    document.getElementById('report-insights').innerHTML = `
-        <div class="insight-card">
-            <div class="insight-card-title"><i data-lucide="trending-up"></i> Rata-rata Penjualan/Hari</div>
-            <div class="insight-card-value">${rpShort(6150000)}</div>
-            <div class="insight-card-desc">Berdasarkan data 7 hari terakhir</div>
-        </div>
-        <div class="insight-card">
-            <div class="insight-card-title"><i data-lucide="receipt"></i> Rata-rata Nilai Invoice</div>
-            <div class="insight-card-value">${rpShort(4305000)}</div>
-            <div class="insight-card-desc">Dari ${INVOICES.length} invoice bulan ini</div>
-        </div>
-        <div class="insight-card">
-            <div class="insight-card-title"><i data-lucide="percent"></i> Margin Rata-rata</div>
-            <div class="insight-card-value">28.3%</div>
-            <div class="insight-card-desc">Laba kotor dibanding omzet</div>
-        </div>
-        <div class="insight-card">
-            <div class="insight-card-title"><i data-lucide="users"></i> Customer Retention</div>
-            <div class="insight-card-value">87%</div>
-            <div class="insight-card-desc">Pelanggan yang repeat order</div>
-        </div>
-    `;
+async function renderReports() {
+    const bulanSelect = document.getElementById('reports-filter-bulan');
+    const tahunSelect = document.getElementById('reports-filter-tahun');
 
-    // Top products horizontal bar chart
-    const topProducts = [
-        { name: 'Kopi Arabica 250g', value: 8500000 },
-        { name: 'Susu UHT 1L (karton)', value: 6200000 },
-        { name: 'Mie Instan Goreng (dus)', value: 5750000 },
-        { name: 'Air Mineral 600ml (dus)', value: 4100000 },
-        { name: 'Beras Premium 5kg', value: 3800000 },
-    ];
-    const maxProd = topProducts[0].value;
+    // Default to current month/year on first load
+    if (!bulanSelect.value) {
+        const today = new Date();
+        bulanSelect.value = today.getMonth() + 1;
+        tahunSelect.value = today.getFullYear();
+    }
 
-    document.getElementById('top-products-chart').innerHTML = topProducts.map(p => {
-        const pct = (p.value / maxProd) * 100;
-        return `
-            <div class="hbar-item">
-                <span class="hbar-label">${p.name}</span>
-                <div class="hbar-track">
-                    <div class="hbar-fill" style="width: ${pct}%;">
-                        <span class="hbar-fill-text">${pct >= 30 ? rpShort(p.value) : ''}</span>
-                    </div>
-                </div>
-                <span class="hbar-value">${rpShort(p.value)}</span>
+    const bulan = bulanSelect.value;
+    const tahun = tahunSelect.value;
+
+    const insightsEl = document.getElementById('report-insights');
+    const productsEl = document.getElementById('top-products-chart');
+    const customersEl = document.getElementById('top-customers-list');
+    const noDataEl = document.getElementById('reports-no-data');
+
+    // Loading states
+    insightsEl.innerHTML = `<div style="grid-column:1/-1; padding:2rem; text-align:center; color:var(--gray-400);">Memuat data...</div>`;
+    productsEl.innerHTML = `<div style="padding:2rem; text-align:center; color:var(--gray-400);">Memuat...</div>`;
+    customersEl.innerHTML = `<li style="padding:1rem; text-align:center; color:var(--gray-400);">Memuat...</li>`;
+    if (noDataEl) noDataEl.style.display = 'none';
+
+    try {
+        const res = await fetch(`/api/laporan/performa?bulan=${bulan}&tahun=${tahun}`, {
+            headers: getAuthHeaders()
+        });
+        const dataRes = await res.json();
+
+        if (!dataRes.success) throw new Error(dataRes.error || 'Gagal memuat data');
+
+        const d = dataRes.data;
+
+        // Show no-data notice if no transactions
+        if (noDataEl) noDataEl.style.display = d.has_data ? 'none' : 'block';
+
+        // 1. Insight Cards
+        insightsEl.innerHTML = `
+            <div class="insight-card">
+                <div class="insight-card-title"><i data-lucide="trending-up"></i> Rata-rata Penjualan/Hari</div>
+                <div class="insight-card-value">${rpShort(d.rata_hari)}</div>
+                <div class="insight-card-desc">Berdasarkan data bulan ini</div>
+            </div>
+            <div class="insight-card">
+                <div class="insight-card-title"><i data-lucide="receipt"></i> Rata-rata Nilai Invoice</div>
+                <div class="insight-card-value">${rpShort(d.rata_invoice)}</div>
+                <div class="insight-card-desc">Dari ${d.jumlah_invoice} invoice bulan ini</div>
+            </div>
+            <div class="insight-card">
+                <div class="insight-card-title"><i data-lucide="percent"></i> Margin Rata-rata</div>
+                <div class="insight-card-value">${d.margin.toFixed(1)}%</div>
+                <div class="insight-card-desc">Laba kotor dibanding omzet</div>
+            </div>
+            <div class="insight-card">
+                <div class="insight-card-title"><i data-lucide="users"></i> Customer Retention</div>
+                <div class="insight-card-value">${Math.round(d.retention)}%</div>
+                <div class="insight-card-desc">Pelanggan yang repeat order</div>
             </div>
         `;
-    }).join('');
+        if (typeof lucide !== 'undefined') lucide.createIcons();
 
-    // Top customers rank list
-    const topCustomers = [
-        { name: 'Minimarket Jaya Abadi', value: 'Rp 67.8jt' },
-        { name: 'Kafe Nusantara', value: 'Rp 45.2jt' },
-        { name: 'Toko Berkah Jaya', value: 'Rp 28.5jt' },
-        { name: 'Toko Makmur Sentosa', value: 'Rp 18.9jt' },
-        { name: 'Kedai Kopi Pagi', value: 'Rp 12.3jt' },
-    ];
+        // 2. Top Products Bar Chart
+        if (!d.has_data || d.top_products.every(p => p.total_nilai === 0)) {
+            productsEl.innerHTML = `<div style="padding:2rem; text-align:center; color:var(--gray-400); font-size:0.88rem;">Belum ada data penjualan bulan ini</div>`;
+        } else {
+            const maxProd = d.top_products[0].total_nilai || 1;
+            productsEl.innerHTML = d.top_products.map(p => {
+                const pct = (p.total_nilai / maxProd) * 100;
+                return `
+                    <div class="hbar-item">
+                        <span class="hbar-label" title="${p.name}">${p.name}</span>
+                        <div class="hbar-track">
+                            <div class="hbar-fill" style="width: ${pct}%;">
+                                <span class="hbar-fill-text">${pct >= 30 ? rpShort(p.total_nilai) : ''}</span>
+                            </div>
+                        </div>
+                        <span class="hbar-value">${rpShort(p.total_nilai)}</span>
+                    </div>
+                `;
+            }).join('');
+        }
 
-    document.getElementById('top-customers-list').innerHTML = topCustomers.map((c, i) => `
-        <li class="insight-rank-item">
-            <span class="insight-rank-num">${i + 1}</span>
-            <span class="insight-rank-name">${c.name}</span>
-            <span class="insight-rank-value">${c.value}</span>
-        </li>
-    `).join('');
+        // 3. Top Customers Rank List
+        const badgeColors = [
+            'background:linear-gradient(135deg,#f59e0b,#d97706); color:white;',  // gold
+            'background:var(--gray-300); color:white;',                           // silver
+            'background:#cd7f32; color:white;',                                   // bronze
+        ];
+        if (d.top_customers.length === 0) {
+            customersEl.innerHTML = `<li style="padding:1.5rem; text-align:center; color:var(--gray-400); font-size:0.88rem;">Belum ada data penjualan bulan ini</li>`;
+        } else {
+            customersEl.innerHTML = d.top_customers.map((c, i) => `
+                <li class="insight-rank-item">
+                    <span class="insight-rank-num" style="${i < 3 ? badgeColors[i] : ''}">${i + 1}</span>
+                    <span class="insight-rank-name">${c.name}</span>
+                    <span class="insight-rank-value">${rpShort(c.total_belanja)}</span>
+                </li>
+            `).join('');
+        }
+
+    } catch (err) {
+        console.error('renderReports error:', err);
+        insightsEl.innerHTML = `<div style="grid-column:1/-1; padding:2rem; text-align:center; color:var(--rose-500);">Gagal memuat data: ${err.message}</div>`;
+        productsEl.innerHTML = '';
+        customersEl.innerHTML = '';
+    }
 }
 
 // ---------- POS / Kasir ----------
@@ -1296,12 +1555,10 @@ document.getElementById('btn-checkout')?.addEventListener('click', async () => {
     const paymentTypeSelect = document.getElementById('cart-payment-type');
     const payment_type_id = paymentTypeSelect ? paymentTypeSelect.value : 'PT-1';
     const payTypeName = getPaymentTypeName(paymentTypeSelect).toLowerCase();
-    // Let's deduce payTypeStr from payment_type_id or payTypeName to know if it's DP or Tempo/Credit
+    // Let's deduce payTypeStr from payment_type_id or payTypeName to know if it's Tempo/Credit
     let payTypeStr = 'tunai';
     if (payment_type_id === 'PT-2' || payTypeName.includes('tempo') || payTypeName.includes('credit')) {
         payTypeStr = 'tempo';
-    } else if (payment_type_id === 'PT-3' || payTypeName.includes('dp')) {
-        payTypeStr = 'dp';
     }
     
     const subtotal = cart.reduce((s, c) => s + c.price * c.qty, 0);
@@ -1311,10 +1568,6 @@ document.getElementById('btn-checkout')?.addEventListener('click', async () => {
     let paid = total;
     if (payTypeStr === 'tempo') {
         paid = 0;
-    } else if (payTypeStr === 'dp') {
-        const dpPrompt = prompt(`Total belanja: ${rp(total)}. Masukkan jumlah uang muka (DP):`, (total / 2).toString());
-        if (dpPrompt === null) return;
-        paid = parseFloat(dpPrompt) || 0;
     }
     
     const payload = {
@@ -1550,10 +1803,31 @@ async function init() {
     renderHutang();
     renderCashFlow();
     renderProfitLoss();
+
+    // Set default month/year for Neraca dropdowns
+    const balanceBulanSelect = document.getElementById('balance-filter-bulan');
+    const balanceTahunSelect = document.getElementById('balance-filter-tahun');
+    if (balanceBulanSelect && balanceTahunSelect) {
+        const today = new Date();
+        balanceBulanSelect.value = today.getMonth() + 1;
+        balanceTahunSelect.value = today.getFullYear();
+    }
+
     renderBalance();
+
+    // Set default month/year for Laporan Performa dropdowns
+    const reportsBulanSelect = document.getElementById('reports-filter-bulan');
+    const reportsTahunSelect = document.getElementById('reports-filter-tahun');
+    if (reportsBulanSelect && reportsTahunSelect) {
+        const today = new Date();
+        reportsBulanSelect.value = today.getMonth() + 1;
+        reportsTahunSelect.value = today.getFullYear();
+    }
+
     renderReports();
     renderPOSProducts();
     populateCustomerSelect();
+    setupChartListeners();
 
     const btnAddPoItem = document.getElementById('btn-add-purchase-item');
     if (btnAddPoItem) btnAddPoItem.addEventListener('click', () => { if (window.addAddPurchaseItem) window.addAddPurchaseItem(); });
@@ -2071,8 +2345,9 @@ function renderAddPurchaseItems() {
             <td style="padding: 0.5rem;">
                 <div style="font-weight: 500; color: var(--gray-900);">${product.name}</div>
             </td>
-            <td style="padding: 0.5rem; text-align: center;">
+            <td style="padding: 0.5rem; text-align: center; white-space: nowrap;">
                 <input type="number" min="1" value="${item.quantity}" onchange="updateAddPurchaseItemQty(${index}, this.value)" style="width: 60px; padding: 0.25rem; border: 1px solid var(--gray-200); border-radius: 0.25rem; text-align: center;">
+                <span style="font-size: 0.8rem; color: var(--gray-500); margin-left: 0.25rem;">${product.unit || 'pcs'}</span>
             </td>
             <td style="padding: 0.5rem; text-align: right;">
                 <div style="display:flex; align-items:center; justify-content:flex-end; gap:0.25rem;">
@@ -2186,8 +2461,9 @@ function renderEditPurchaseItems() {
             <td style="padding: 0.5rem;">
                 <div style="font-weight: 500; color: var(--gray-900);">${product.name}</div>
             </td>
-            <td style="padding: 0.5rem; text-align: center;">
+            <td style="padding: 0.5rem; text-align: center; white-space: nowrap;">
                 <input type="number" min="1" value="${item.quantity}" onchange="updateEditPurchaseItemQty(${index}, this.value)" style="width: 60px; padding: 0.25rem; border: 1px solid var(--gray-200); border-radius: 0.25rem; text-align: center;">
+                <span style="font-size: 0.8rem; color: var(--gray-500); margin-left: 0.25rem;">${product.unit || 'pcs'}</span>
             </td>
             <td style="padding: 0.5rem; text-align: right;">
                 <div style="display:flex; align-items:center; justify-content:flex-end; gap:0.25rem;">
@@ -2396,6 +2672,7 @@ async function fetchInvoices() {
         renderPiutang();
         renderSummaryCards();
         renderRecentTransactions();
+        refreshCharts();
     } catch (err) {
         console.error('Failed to fetch invoices', err);
     }
@@ -2832,7 +3109,7 @@ async function submitPayment() {
         const res = await fetch(url, {
             method: 'POST',
             headers: getAuthHeaders(),
-            body: JSON.stringify({ amount: parseFloat(amount), payment_method: method })
+            body: JSON.stringify({ amount: parseFloat(amount), payment_type_id: method })
         });
         if (res.ok) {
             closeModal('modal-payment');
@@ -2993,13 +3270,43 @@ async function populateMasterDropdowns() {
                 const el = document.getElementById(id);
                 if (el) el.innerHTML = optionsHtml;
             });
+            return data; // Return data for further processing if needed
         };
 
-        await fetchAndFill('/api/master/product-categories', ['add-product-category', 'edit-product-category'], 'id', 'name');
+        const prodCats = await fetchAndFill('/api/master/product-categories', ['add-product-category', 'edit-product-category'], 'id', 'name');
         await fetchAndFill('/api/master/product-units', ['add-product-unit', 'edit-product-unit'], 'id', 'name');
-        await fetchAndFill('/api/master/customer-categories', ['add-customer-type', 'edit-customer-type'], 'id', 'name');
+        const custCats = await fetchAndFill('/api/master/customer-categories', ['add-customer-type', 'edit-customer-type'], 'id', 'name');
         await fetchAndFill('/api/master/vendor-categories', ['add-vendor-category', 'edit-vendor-category'], 'id', 'name');
-        await fetchAndFill('/api/master/payment-types', ['cart-payment-type', 'add-purchase-payment-type', 'edit-purchase-payment-type', 'edit-invoice-payment-type', 'payment-method'], 'id', 'name');
+        await fetchAndFill('/api/master/payment-types', ['cart-payment-type', 'add-purchase-payment-type', 'edit-purchase-payment-type', 'edit-invoice-payment-type', 'payment-method', 'manual-invoice-payment-type'], 'id', 'name');
+
+        // Populate Product Category Filter
+        const prodCatFilter = document.getElementById('product-category-filter');
+        if (prodCatFilter) {
+            prodCatFilter.innerHTML = '<option value="all">Semua Kategori</option>' + prodCats.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+        }
+
+        // Populate POS Category Tabs
+        const posCatTabs = document.getElementById('pos-category-tabs');
+        if (posCatTabs) {
+            posCatTabs.innerHTML = '<button class="pos-category-tab active" data-cat="all">Semua</button>' + prodCats.map(c => `<button class="pos-category-tab" data-cat="${c.name}">${c.name}</button>`).join('');
+            // Bind events for pos tabs
+            document.querySelectorAll('.pos-category-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.pos-category-tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    renderPOSProducts(document.getElementById('pos-search').value, tab.dataset.cat);
+                });
+            });
+        }
+
+        // Populate Customer Category Filter
+        const custTypeFilter = document.getElementById('customer-type-filter');
+        if (custTypeFilter) {
+            custTypeFilter.innerHTML = '<option value="all">Semua Tipe</option>' + custCats.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+        }
+
+        // Fetch and populate Cash Categories
+        await fetchCashCategories();
     } catch (err) {
         console.error('Failed to populate master dropdowns', err);
     }
@@ -3193,13 +3500,17 @@ async function loadPrefixSettings() {
         const res = await fetch('/api/settings', { headers: getAuthHeaders() });
         if (res.ok) {
             const settings = await res.json();
+            const productEl  = document.getElementById('settings-prefix-product');
             const customerEl = document.getElementById('settings-prefix-customer');
             const vendorEl   = document.getElementById('settings-prefix-vendor');
+            const cashTxEl   = document.getElementById('settings-prefix-cash-tx');
             const purchaseEl = document.getElementById('settings-prefix-purchase');
             const salesEl     = document.getElementById('settings-prefix-sales');
             
+            if (productEl)  productEl.value  = settings.prefix_product ?? 'P';
             if (customerEl) customerEl.value = settings.prefix_customer ?? 'C';
             if (vendorEl)   vendorEl.value   = settings.prefix_vendor ?? 'V';
+            if (cashTxEl)   cashTxEl.value   = settings.prefix_cash_transaction ?? 'CT';
             if (purchaseEl) purchaseEl.value = settings.prefix_purchase ?? 'PO/{YYYY}/{MM}/';
             if (salesEl)     salesEl.value     = settings.prefix_sales ?? 'INV/{YYYY}/{MM}/';
         }
@@ -3210,8 +3521,10 @@ async function loadPrefixSettings() {
 
 async function savePrefixSettings() {
     const payload = {
+        prefix_product: document.getElementById('settings-prefix-product')?.value || 'P',
         prefix_customer: document.getElementById('settings-prefix-customer')?.value || 'C',
         prefix_vendor: document.getElementById('settings-prefix-vendor')?.value || 'V',
+        prefix_cash_transaction: document.getElementById('settings-prefix-cash-tx')?.value || 'CT',
         prefix_purchase: document.getElementById('settings-prefix-purchase')?.value || 'PO/{YYYY}/{MM}/',
         prefix_sales: document.getElementById('settings-prefix-sales')?.value || 'INV/{YYYY}/{MM}/'
     };
@@ -3236,3 +3549,161 @@ async function savePrefixSettings() {
 
 // Make functions globally accessible
 window.savePrefixSettings = savePrefixSettings;
+
+async function saveManualInvoice() {
+    const payload = {
+        id: document.getElementById('manual-invoice-id').value,
+        customer_id: document.getElementById('manual-invoice-customer').value,
+        date: document.getElementById('manual-invoice-date').value,
+        due_date: document.getElementById('manual-invoice-duedate').value,
+        total: parseFloat(document.getElementById('manual-invoice-total').value) || 0,
+        payment_type_id: document.getElementById('manual-invoice-payment-type').value,
+        payment_method: document.getElementById('manual-invoice-payment-method').value
+    };
+
+    if (!payload.id || !payload.customer_id || !payload.total) {
+        alert('Mohon isi No Invoice, Customer, dan Total Transaksi.');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/invoices/manual', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            closeModal('modal-manual-invoice');
+            showToast('Invoice outstanding berhasil dicatat', 'success');
+            document.getElementById('manual-invoice-id').value = '';
+            document.getElementById('manual-invoice-total').value = '';
+            document.getElementById('manual-invoice-customer').value = '';
+            document.getElementById('manual-invoice-customer-search').value = '';
+            const dropdown = document.getElementById('manual-invoice-customer-dropdown');
+            if (dropdown) {
+                dropdown.style.display = 'none';
+                dropdown.innerHTML = '';
+            }
+            fetchInvoices();
+        } else {
+            const err = await res.json();
+            alert('Gagal: ' + err.error);
+        }
+    } catch (err) {
+        console.error(err);
+        alert('Terjadi kesalahan jaringan.');
+    }
+}
+window.saveManualInvoice = saveManualInvoice;
+
+let CASH_CATEGORIES = [];
+
+async function fetchCashCategories() {
+    try {
+        const res = await fetch('/api/cash-categories', { headers: getAuthHeaders() });
+        if (res.ok) {
+            CASH_CATEGORIES = await res.json();
+            onCashTypeChange('add');
+            onCashTypeChange('edit');
+        }
+    } catch (err) {
+        console.error('Failed to fetch cash categories', err);
+    }
+}
+
+window.onCashTypeChange = (prefix) => {
+    const typeEl = document.getElementById(`${prefix}-cash-type`);
+    const catEl = document.getElementById(`${prefix}-cash-category`);
+    if (!typeEl || !catEl) return;
+    
+    const selectedType = typeEl.value;
+    const filteredCats = CASH_CATEGORIES.filter(c => c.type === selectedType || c.type === 'ALL');
+    
+    catEl.innerHTML = filteredCats.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+};
+
+// Manual Invoice Customer Search bindings
+document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('manual-invoice-customer-search');
+    const hiddenInput = document.getElementById('manual-invoice-customer');
+    const dropdown = document.getElementById('manual-invoice-customer-dropdown');
+
+    if (searchInput && hiddenInput && dropdown) {
+        let debounceTimer;
+
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value;
+            hiddenInput.value = ''; // Reset the hidden value so we don't submit stale selection if they modified the input
+
+            clearTimeout(debounceTimer);
+            if (query.trim().length < 2) {
+                dropdown.style.display = 'none';
+                dropdown.innerHTML = '';
+                return;
+            }
+
+            debounceTimer = setTimeout(async () => {
+                try {
+                    const res = await fetch(`/api/customers/search?q=${encodeURIComponent(query)}`, {
+                        headers: getAuthHeaders()
+                    });
+                    if (!res.ok) {
+                        dropdown.innerHTML = '<div style="padding: 0.75rem; color: var(--rose-500); font-size: 0.875rem; text-align: center;">Gagal memuat data customer</div>';
+                        dropdown.style.display = 'block';
+                        return;
+                    }
+                    const data = await res.json();
+                    if (!Array.isArray(data) || data.length === 0) {
+                        dropdown.innerHTML = '<div style="padding: 0.75rem; color: var(--gray-400); font-size: 0.875rem; text-align: center;">Customer tidak ditemukan</div>';
+                        dropdown.style.display = 'block';
+                        return;
+                    }
+
+                    dropdown.innerHTML = data.map(c => `
+                        <div class="manual-invoice-customer-dropdown-item" data-id="${c.id}" data-name="${c.name}" style="padding: 0.5rem 0.75rem; cursor: pointer; border-bottom: 1px solid var(--gray-100); display: flex; flex-direction: column; transition: background-color 0.2s;">
+                            <span style="font-weight: 500; font-size: 0.875rem;">${c.name} — ${c.city || ''}</span>
+                        </div>
+                    `).join('');
+
+                    dropdown.style.display = 'block';
+
+                    dropdown.querySelectorAll('.manual-invoice-customer-dropdown-item').forEach(item => {
+                        item.addEventListener('click', (e) => {
+                            const id = e.currentTarget.dataset.id;
+                            const name = e.currentTarget.dataset.name;
+                            searchInput.value = name;
+                            hiddenInput.value = id;
+                            dropdown.style.display = 'none';
+                        });
+
+                        item.addEventListener('mouseenter', () => {
+                            item.style.backgroundColor = 'var(--gray-50)';
+                        });
+                        item.addEventListener('mouseleave', () => {
+                            item.style.backgroundColor = 'transparent';
+                        });
+                    });
+                } catch (err) {
+                    console.error('Error searching customers:', err);
+                    dropdown.innerHTML = '<div style="padding: 0.75rem; color: var(--rose-500); font-size: 0.875rem; text-align: center;">Gagal memuat data customer</div>';
+                    dropdown.style.display = 'block';
+                }
+            }, 300);
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#modal-manual-invoice .customer-search-wrapper')) {
+                dropdown.style.display = 'none';
+            }
+        });
+
+        // Prevent opening dropdown from closing when clicking inside
+        searchInput.addEventListener('focus', () => {
+            if (searchInput.value.trim().length >= 2 && dropdown.innerHTML !== '') {
+                dropdown.style.display = 'block';
+            }
+        });
+    }
+});

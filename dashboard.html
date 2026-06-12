@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- Styles -->
@@ -243,12 +244,8 @@
                                 <i data-lucide="search"></i>
                                 <input type="text" placeholder="Cari produk..." id="pos-search">
                             </div>
-                            <div class="pos-category-tabs" id="pos-category-tabs">
-                                <button class="pos-category-tab active" data-cat="all">Semua</button>
-                                <button class="pos-category-tab" data-cat="Minuman">Minuman</button>
-                                <button class="pos-category-tab" data-cat="Makanan">Makanan</button>
-                                <button class="pos-category-tab" data-cat="Sembako">Sembako</button>
-                                <button class="pos-category-tab" data-cat="Lainnya">Lainnya</button>
+                            <div class="pos-categories" id="pos-category-tabs">
+                                <!-- Filled by JS -->
                             </div>
                         </div>
                         <div class="pos-product-grid" id="pos-product-grid">
@@ -322,11 +319,7 @@
                             <input type="text" placeholder="Cari produk..." id="product-search">
                         </div>
                         <select class="filter-select" id="product-category-filter">
-                            <option value="">Semua Kategori</option>
-                            <option value="Minuman">Minuman</option>
-                            <option value="Makanan">Makanan</option>
-                            <option value="Sembako">Sembako</option>
-                            <option value="Lainnya">Lainnya</option>
+                            <!-- Filled by JS -->
                         </select>
                     </div>
                     <div class="page-toolbar-right">
@@ -373,11 +366,7 @@
                             <input type="text" placeholder="Cari pelanggan..." id="customer-search">
                         </div>
                         <select class="filter-select" id="customer-type-filter">
-                            <option value="">Semua Tipe</option>
-                            <option value="Reseller">Reseller</option>
-                            <option value="Warung">Warung</option>
-                            <option value="Kafe">Kafe</option>
-                            <option value="Toko">Toko</option>
+                            <!-- Filled by JS -->
                         </select>
                     </div>
                     <div class="page-toolbar-right" style="display: flex; gap: 0.5rem; align-items: center;">
@@ -538,6 +527,9 @@
                         </select>
                     </div>
                     <div class="page-toolbar-right">
+                        <button class="btn-toolbar primary" onclick="openModal('modal-manual-invoice')">
+                            <i data-lucide="plus"></i> Input Invoice Outstanding
+                        </button>
                         <button class="btn-toolbar secondary">
                             <i data-lucide="download"></i> Export
                         </button>
@@ -749,22 +741,46 @@
             <section class="page-section" id="page-balance">
                 <div class="page-toolbar">
                     <div class="page-toolbar-left">
-                        <div class="period-selector">
-                            <select class="filter-select">
-                                <option>Per 3 Juni 2026</option>
-                                <option>Per 31 Mei 2026</option>
+                        <div class="report-filters" style="display: flex; gap: 1rem; align-items: center;">
+                            <select id="balance-filter-bulan" class="form-input" style="width: auto;">
+                                <option value="1">Januari</option>
+                                <option value="2">Februari</option>
+                                <option value="3">Maret</option>
+                                <option value="4">April</option>
+                                <option value="5">Mei</option>
+                                <option value="6">Juni</option>
+                                <option value="7">Juli</option>
+                                <option value="8">Agustus</option>
+                                <option value="9">September</option>
+                                <option value="10">Oktober</option>
+                                <option value="11">November</option>
+                                <option value="12">Desember</option>
                             </select>
+                            <select id="balance-filter-tahun" class="form-input" style="width: auto;">
+                                <option value="2026">2026</option>
+                                <option value="2025">2025</option>
+                            </select>
+                            <button class="btn-toolbar primary" onclick="renderBalance()">Tampilkan</button>
                         </div>
                     </div>
                     <div class="page-toolbar-right">
-                        <button class="btn-toolbar secondary">
-                            <i data-lucide="download"></i> Export PDF
+                        <button class="btn-toolbar secondary" onclick="window.print()">
+                            <i data-lucide="printer"></i> Cetak / Export PDF
                         </button>
                     </div>
                 </div>
 
-                <div class="dashboard-grid-2" id="balance-content">
-                    <!-- Filled by JS -->
+                <div class="report-container" id="balance-report-container" style="background: white; border-radius: 12px; padding: 2rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
+                    <div class="report-header" style="text-align: center; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 2px solid var(--gray-100);">
+                        <div class="report-title" style="font-size: 1.5rem; font-weight: 700; color: var(--gray-900); margin-bottom: 0.5rem;">Neraca (Balance Sheet)</div>
+                        <div id="balance-report-period" style="color: var(--gray-500); font-size: 0.95rem;">Per: -</div>
+                    </div>
+                    <div class="dashboard-grid-2" id="balance-content">
+                        <div style="grid-column: 1 / -1; text-align:center; padding: 3rem; color: var(--gray-400);">
+                            Pilih bulan dan tahun lalu klik Tampilkan
+                        </div>
+                    </div>
+                    <div id="balance-status-indicator" style="display:none; margin-top: 1.5rem; padding: 0.75rem 1.25rem; border-radius: 8px; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;"></div>
                 </div>
             </section>
 
@@ -774,13 +790,35 @@
             <section class="page-section" id="page-reports">
                 <div class="page-toolbar">
                     <div class="page-toolbar-left">
-                        <div class="period-selector">
-                            <select class="filter-select">
-                                <option>Juni 2026</option>
-                                <option>Mei 2026</option>
+                        <div class="report-filters" style="display: flex; gap: 1rem; align-items: center;">
+                            <select id="reports-filter-bulan" class="form-input" style="width: auto;">
+                                <option value="1">Januari</option>
+                                <option value="2">Februari</option>
+                                <option value="3">Maret</option>
+                                <option value="4">April</option>
+                                <option value="5">Mei</option>
+                                <option value="6">Juni</option>
+                                <option value="7">Juli</option>
+                                <option value="8">Agustus</option>
+                                <option value="9">September</option>
+                                <option value="10">Oktober</option>
+                                <option value="11">November</option>
+                                <option value="12">Desember</option>
                             </select>
+                            <select id="reports-filter-tahun" class="form-input" style="width: auto;">
+                                <option value="2027">2027</option>
+                                <option value="2026">2026</option>
+                                <option value="2025">2025</option>
+                                <option value="2024">2024</option>
+                            </select>
+                            <button class="btn-toolbar primary" onclick="renderReports()">Tampilkan</button>
                         </div>
                     </div>
+                </div>
+
+                <!-- No-data notice -->
+                <div id="reports-no-data" style="display:none; margin-bottom:1rem; padding:0.75rem 1.25rem; background:var(--gray-50); border:1px solid var(--gray-200); border-radius:8px; color:var(--gray-500); font-size:0.88rem;">
+                    ℹ️ Tidak ada transaksi pada periode ini
                 </div>
 
                 <!-- Insight Cards -->
@@ -916,6 +954,11 @@
                         </div>
                         <div class="settings-card-body">
                             <div class="form-group">
+                                <label>Prefix ID Produk</label>
+                                <input type="text" id="settings-prefix-product" class="form-input" placeholder="Contoh: P">
+                                <span class="help-text" style="font-size:0.75rem; color:var(--gray-400);">Format statis (misal: P, PROD-)</span>
+                            </div>
+                            <div class="form-group">
                                 <label>Prefix ID Pelanggan</label>
                                 <input type="text" id="settings-prefix-customer" class="form-input" placeholder="Contoh: C">
                                 <span class="help-text" style="font-size:0.75rem; color:var(--gray-400);">Format statis (misal: C, CUST-)</span>
@@ -924,6 +967,11 @@
                                 <label>Prefix ID Vendor</label>
                                 <input type="text" id="settings-prefix-vendor" class="form-input" placeholder="Contoh: V">
                                 <span class="help-text" style="font-size:0.75rem; color:var(--gray-400);">Format statis (misal: V, VEND-)</span>
+                            </div>
+                            <div class="form-group">
+                                <label>Prefix ID Transaksi Kas</label>
+                                <input type="text" id="settings-prefix-cash-tx" class="form-input" placeholder="Contoh: CT">
+                                <span class="help-text" style="font-size:0.75rem; color:var(--gray-400);">Format statis (misal: CT, KAS-)</span>
                             </div>
                             <div class="form-group">
                                 <label>Prefix Pembelian (PO)</label>
@@ -1911,7 +1959,7 @@
             <div class="form-row">
                 <div class="form-group">
                     <label>Tipe</label>
-                    <select id="add-cash-type" class="form-input">
+                    <select id="add-cash-type" class="form-input" onchange="onCashTypeChange('add')">
                         <option value="IN">Kas Masuk</option>
                         <option value="OUT">Kas Keluar</option>
                     </select>
@@ -1942,12 +1990,7 @@
             <div class="form-group">
                 <label>Kategori</label>
                 <select id="add-cash-category" class="form-input">
-                    <option>Penjualan</option>
-                    <option>Pembelian Stok</option>
-                    <option>Operasional</option>
-                    <option>Gaji</option>
-                    <option>Sewa</option>
-                    <option>Lainnya</option>
+                    <!-- Filled by JS -->
                 </select>
             </div>
         </div>
@@ -1970,7 +2013,7 @@
             <div class="form-row">
                 <div class="form-group">
                     <label>Tipe</label>
-                    <select id="edit-cash-type" class="form-input">
+                    <select id="edit-cash-type" class="form-input" onchange="onCashTypeChange('edit')">
                         <option value="IN">Kas Masuk</option>
                         <option value="OUT">Kas Keluar</option>
                     </select>
@@ -2001,12 +2044,7 @@
             <div class="form-group">
                 <label>Kategori</label>
                 <select id="edit-cash-category" class="form-input">
-                    <option>Penjualan</option>
-                    <option>Pembelian Stok</option>
-                    <option>Operasional</option>
-                    <option>Gaji</option>
-                    <option>Sewa</option>
-                    <option>Lainnya</option>
+                    <!-- Filled by JS -->
                 </select>
             </div>
         </div>
@@ -2313,6 +2351,64 @@
     </div>
 </div>
 
-<script src="dashboard.js"></script>
+    <div class="modal-overlay" id="modal-manual-invoice">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>Input Invoice Outstanding</h3>
+                <button class="modal-close" onclick="closeModal('modal-manual-invoice')"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>No Invoice</label>
+                        <input type="text" id="manual-invoice-id" class="form-input" placeholder="INV-2026-XX-XXXX">
+                    </div>
+                    <div class="form-group">
+                        <label>Customer</label>
+                        <div class="customer-search-wrapper" style="position: relative;">
+                            <input type="text" id="manual-invoice-customer-search" class="form-input" placeholder="Cari nama customer..." autocomplete="off">
+                            <input type="hidden" id="manual-invoice-customer">
+                            <div id="manual-invoice-customer-dropdown" style="display: none; position: absolute; width: 100%; max-height: 200px; overflow-y: auto; background: white; border: 1px solid var(--gray-200); border-radius: 0.5rem; margin-top: 0.25rem; z-index: 50; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);">
+                                <!-- Filled by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Tanggal Transaksi</label>
+                        <input type="date" id="manual-invoice-date" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label>Jatuh Tempo</label>
+                        <input type="date" id="manual-invoice-duedate" class="form-input">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Total Transaksi (Rp)</label>
+                    <input type="number" id="manual-invoice-total" class="form-input" placeholder="0">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Tipe Pembayaran</label>
+                        <select id="manual-invoice-payment-type" class="form-input">
+                            <!-- Filled by JS -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Metode Pembayaran (Jika ada)</label>
+                        <input type="text" id="manual-invoice-payment-method" class="form-input" placeholder="Transfer/Tunai/-">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-toolbar secondary" onclick="closeModal('modal-manual-invoice')">Batal</button>
+                <button class="btn-toolbar primary" onclick="saveManualInvoice()"><i data-lucide="save"></i> Simpan Invoice</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script -->
+    <script src="dashboard.js"></script>
 </body>
 </html>

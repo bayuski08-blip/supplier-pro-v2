@@ -33,7 +33,7 @@ INSERT INTO product_categories (id, name) VALUES ('PC-1', 'Minuman'), ('PC-2', '
 INSERT INTO product_units (id, name) VALUES ('PU-1', 'pcs'), ('PU-2', 'box'), ('PU-3', 'botol'), ('PU-4', 'dus'), ('PU-5', 'pack'), ('PU-6', 'sak'), ('PU-7', 'kg'), ('PU-8', 'karton') ON CONFLICT DO NOTHING;
 INSERT INTO customer_categories (id, name) VALUES ('CC-1', 'Reseller'), ('CC-2', 'Warung'), ('CC-3', 'Kafe'), ('CC-4', 'Toko') ON CONFLICT DO NOTHING;
 INSERT INTO vendor_categories (id, name) VALUES ('VC-1', 'Minuman'), ('VC-2', 'Makanan'), ('VC-3', 'Sembako'), ('VC-4', 'Non-Pangan') ON CONFLICT DO NOTHING;
-INSERT INTO payment_types (id, name) VALUES ('PT-1', 'Tunai'), ('PT-2', 'Tempo'), ('PT-3', 'DP'), ('PT-4', 'Transfer') ON CONFLICT DO NOTHING;
+INSERT INTO payment_types (id, name) VALUES ('PT-1', 'Tunai'), ('PT-2', 'Tempo'), ('PT-4', 'Transfer') ON CONFLICT DO NOTHING;
 
 
 -- ========== 3. MIGRATE PRODUCTS ==========
@@ -75,3 +75,18 @@ ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS invoice_id VARCHAR(255) R
 ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS purchase_order_id VARCHAR(255) REFERENCES purchase_orders(id) ON DELETE SET NULL;
 ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS payment_type_id VARCHAR(255) REFERENCES payment_types(id) ON DELETE SET NULL;
 ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+
+-- ========== 8. ADD USER_ID, CASH_CATEGORIES AND REMOVE DP ==========
+ALTER TABLE sales_invoices ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+
+CREATE TABLE IF NOT EXISTS cash_categories (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  type VARCHAR(10) CHECK (type IN ('IN', 'OUT', 'BOTH')) DEFAULT 'BOTH',
+  is_system BOOLEAN DEFAULT false
+);
+
+UPDATE sales_invoices SET payment_type_id = 'PT-2' WHERE payment_type_id = 'PT-3';
+UPDATE purchase_orders SET payment_type_id = 'PT-2' WHERE payment_type_id = 'PT-3';
+DELETE FROM payment_types WHERE id = 'PT-3';

@@ -7,7 +7,18 @@ INSERT INTO product_categories (id, name) VALUES ('PC-1', 'Minuman'), ('PC-2', '
 INSERT INTO product_units (id, name) VALUES ('PU-1', 'pcs'), ('PU-2', 'box'), ('PU-3', 'botol'), ('PU-4', 'dus'), ('PU-5', 'pack'), ('PU-6', 'sak'), ('PU-7', 'kg'), ('PU-8', 'karton') ON CONFLICT DO NOTHING;
 INSERT INTO customer_categories (id, name) VALUES ('CC-1', 'Reseller'), ('CC-2', 'Warung'), ('CC-3', 'Kafe'), ('CC-4', 'Toko') ON CONFLICT DO NOTHING;
 INSERT INTO vendor_categories (id, name) VALUES ('VC-1', 'Minuman'), ('VC-2', 'Makanan'), ('VC-3', 'Sembako'), ('VC-4', 'Non-Pangan') ON CONFLICT DO NOTHING;
-INSERT INTO payment_types (id, name) VALUES ('PT-1', 'Tunai'), ('PT-2', 'Tempo'), ('PT-3', 'DP'), ('PT-4', 'Transfer') ON CONFLICT DO NOTHING;
+INSERT INTO payment_types (id, name) VALUES ('PT-1', 'Tunai'), ('PT-2', 'Tempo'), ('PT-4', 'Transfer') ON CONFLICT DO NOTHING;
+
+INSERT INTO cash_categories (name, type, is_system) VALUES
+  ('Penjualan', 'IN', true),
+  ('Pelunasan Piutang', 'IN', true),
+  ('Pembelian Stok', 'OUT', true),
+  ('Penyesuaian Stok', 'OUT', true),
+  ('Operasional', 'OUT', false),
+  ('Gaji', 'OUT', false),
+  ('Sewa', 'OUT', false),
+  ('Lainnya', 'BOTH', false)
+ON CONFLICT DO NOTHING;
 
 -- Admin user (id=1 eksplisit agar FK cash_transactions.user_id valid)
 INSERT INTO users (id, username, name, email, password_hash, role, active) 
@@ -66,7 +77,7 @@ VALUES
   ('INV-2026-06-0040', '2026-06-02', 'C0003', 1600000, 0, 0, 1600000, 1000000, '2026-06-16', 'PT-2', 'Transfer', 'Sebagian'),
   ('INV-2026-06-0039', '2026-06-02', 'C0006', 1170000, 0, 0, 1170000, 0, '2026-06-16', 'PT-2', '-', 'Belum Bayar'),
   ('INV-2026-06-0038', '2026-06-01', 'C0002', 780000, 0, 0, 780000, 780000, '2026-06-01', 'PT-1', 'Tunai', 'Lunas'),
-  ('INV-2026-06-0037', '2026-06-01', 'C0004', 2850000, 0, 0, 2850000, 1500000, '2026-06-15', 'PT-3', 'Transfer', 'Sebagian')
+  ('INV-2026-06-0037', '2026-06-01', 'C0004', 2850000, 0, 0, 2850000, 1500000, '2026-06-15', 'PT-2', 'Transfer', 'Sebagian')
 ON CONFLICT (id) DO NOTHING;
 
 -- Purchase Orders (data contoh)
@@ -110,7 +121,7 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO cash_transactions (id, date, type, category, description, amount, method, invoice_id, purchase_order_id, payment_type_id, user_id) 
 VALUES
   ('CT0001', '2026-06-03', 'IN', 'Penjualan', 'Pembayaran INV-2026-06-0041', 1255000, 'Transfer Bank', 'INV-2026-06-0041', NULL, 'PT-1', 1),
-  ('CT0002', '2026-06-02', 'IN', 'Penjualan', 'DP dari Kafe Nusantara', 1000000, 'Transfer Bank', 'INV-2026-06-0040', NULL, 'PT-3', 1),
+  ('CT0002', '2026-06-02', 'IN', 'Pelunasan Piutang', 'DP dari Kafe Nusantara', 1000000, 'Transfer Bank', 'INV-2026-06-0040', NULL, 'PT-2', 1),
   ('CT0003', '2026-06-02', 'OUT', 'Pembelian Stok', 'Bayar PO-2026-06-0018', 3450000, 'Transfer Bank', NULL, 'PO-2026-06-0018', 'PT-1', 1),
   ('CT0004', '2026-06-01', 'IN', 'Penjualan', 'Pembayaran tunai Warung Sari Rasa', 780000, 'Tunai', 'INV-2026-06-0038', NULL, 'PT-1', 1),
   ('CT0005', '2026-06-01', 'OUT', 'Operasional', 'Listrik & air gudang', 2500000, 'Transfer Bank', NULL, NULL, NULL, 1),
@@ -128,8 +139,10 @@ ON CONFLICT (id) DO NOTHING;
 
 -- Seed default prefix settings
 INSERT INTO settings (key, value) VALUES
+  ('prefix_product', 'P'),
   ('prefix_customer', 'C'),
   ('prefix_vendor', 'V'),
+  ('prefix_cash_transaction', 'CT'),
   ('prefix_purchase', 'PO-{YYYY}-{MM}-'),
   ('prefix_sales', 'INV-{YYYY}-{MM}-')
 ON CONFLICT (key) DO NOTHING;

@@ -96,7 +96,8 @@ CREATE TABLE IF NOT EXISTS sales_invoices (
   due_date VARCHAR(255),
   payment_type_id VARCHAR(255) REFERENCES payment_types(id) ON DELETE SET NULL,
   payment_method VARCHAR(255),
-  status VARCHAR(255) DEFAULT 'belum'
+  status VARCHAR(255) DEFAULT 'belum',
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS invoice_items (
@@ -115,7 +116,8 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
   paid_amount NUMERIC DEFAULT 0,
   due_date VARCHAR(255),
   payment_type_id VARCHAR(255) REFERENCES payment_types(id) ON DELETE SET NULL,
-  status VARCHAR(255) DEFAULT 'proses'
+  status VARCHAR(255) DEFAULT 'proses',
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS purchase_order_items (
@@ -144,5 +146,12 @@ CREATE TABLE IF NOT EXISTS cash_transactions (
 CREATE TABLE IF NOT EXISTS settings (
   key VARCHAR(255) PRIMARY KEY,
   value TEXT
+);
+
+CREATE TABLE IF NOT EXISTS cash_categories (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  type VARCHAR(10) CHECK (type IN ('IN', 'OUT', 'BOTH')) DEFAULT 'BOTH',
+  is_system BOOLEAN DEFAULT false
 );
 

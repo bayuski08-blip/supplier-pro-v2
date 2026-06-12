@@ -27,10 +27,13 @@ pool.query(`
 `).then(() => {
   pool.query(`
     INSERT INTO settings (key, value) VALUES
+    ('prefix_product', 'P'),
     ('prefix_customer', 'C'),
     ('prefix_vendor', 'V'),
+    ('prefix_cash_transaction', 'CT'),
     ('prefix_purchase', 'PO/{YYYY}/{MM}/'),
-    ('prefix_sales', 'INV/{YYYY}/{MM}/')
+    ('prefix_sales', 'INV/{YYYY}/{MM}/'),
+    ('modal_pemilik', '0')
     ON CONFLICT (key) DO NOTHING;
   `);
 }).catch(err => console.error('Error initializing settings table on startup:', err));
@@ -53,16 +56,16 @@ async function generateNextId(clientOrPool, tableName, prefixSetting) {
   const yyyy = now.getFullYear().toString();
   const yy = yyyy.slice(-2);
   const mm = String(now.getMonth() + 1).padStart(2, '0');
-  
+
   let resolvedPrefix = prefixSetting || '';
   resolvedPrefix = resolvedPrefix
     .replace(/{YYYY}/g, yyyy)
     .replace(/{YY}/g, yy)
     .replace(/{MM}/g, mm);
-    
+
   const query = `SELECT id FROM ${tableName} WHERE id LIKE $1`;
   const result = await clientOrPool.query(query, [resolvedPrefix + '%']);
-  
+
   let maxNum = 0;
   for (const row of result.rows) {
     const idStr = row.id;
@@ -74,9 +77,9 @@ async function generateNextId(clientOrPool, tableName, prefixSetting) {
       }
     }
   }
-  
+
   const nextNum = maxNum + 1;
-  const padded = String(nextNum).padStart(4, '0');
+  const padded = String(nextNum).padStart(6, '0');
   return resolvedPrefix + padded;
 }
 
@@ -84,7 +87,7 @@ async function generateNextId(clientOrPool, tableName, prefixSetting) {
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-  
+
   if (token == null) return res.sendStatus(401);
 
   jwt.verify(token, SECRET_KEY, (err, user) => {
@@ -102,7 +105,7 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM users WHERE username = $1 AND password_hash = $2 AND active = true', [username, password]);
     const user = result.rows[0];
-    
+
     if (user) {
       const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, SECRET_KEY, { expiresIn: '24h' });
       res.json({ token, role: user.role, username: user.username });
@@ -160,6 +163,24 @@ app.get('/api/master/payment-types', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/cash-categories', authenticateToken, async (req, res) => {
+  const { type } = req.query;
+  try {
+    let query = 'SELECT * FROM cash_categories';
+    let params = [];
+    if (type) {
+      query += ' WHERE type IN ($1, $2) ORDER BY id ASC';
+      params = [type, 'BOTH'];
+    } else {
+      query += ' ORDER BY id ASC';
+    }
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Master Data CRUD (POST, PUT, DELETE) ---
 const MASTER_TABLE_WHITELIST = {
   product_categories: 'product_categories',
@@ -175,7 +196,7 @@ app.post('/api/master/:type', authenticateToken, async (req, res) => {
   const { id, name } = req.body;
   if (!name) return res.status(400).json({ error: 'Nama wajib diisi' });
   try {
-    await pool.query(`INSERT INTO ${tableName} (id, name) VALUES ($1, $2)`, [id || req.params.type.toUpperCase().slice(0,2) + '-' + Date.now(), name]);
+    await pool.query(`INSERT INTO ${tableName} (id, name) VALUES ($1, $2)`, [id || req.params.type.toUpperCase().slice(0, 2) + '-' + Date.now(), name]);
     res.json({ success: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -311,6 +332,100 @@ app.get('/api/dashboard/summary', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/dashboard/sales-trend', authenticateToken, async (req, res) => {
+  const days = parseInt(req.query.days) || 7;
+  try {
+    const query = `
+      SELECT 
+        DATE(date::DATE) AS tanggal,
+        COALESCE(SUM(total), 0) AS total_penjualan,
+        COUNT(*) AS jumlah_transaksi
+      FROM sales_invoices
+      WHERE date::DATE >= CURRENT_DATE - INTERVAL '1 day' * ($1 - 1)
+        AND status != 'Dibatalkan' AND status != 'Batal'
+      GROUP BY DATE(date::DATE)
+      ORDER BY DATE(date::DATE) ASC
+    `;
+    const result = await pool.query(query, [days]);
+
+    // Generate dates in YYYY-MM-DD
+    const resultDates = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const dateVal = String(d.getDate()).padStart(2, '0');
+      resultDates.push(`${y}-${m}-${dateVal}`);
+    }
+
+    const dataMap = {};
+    resultDates.forEach(dateStr => {
+      dataMap[dateStr] = {
+        tanggal: dateStr,
+        total_penjualan: 0,
+        jumlah_transaksi: 0
+      };
+    });
+
+    const formatDateKey = (val) => {
+      if (!val) return '';
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return String(val).split('T')[0];
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const dateVal = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${dateVal}`;
+    };
+
+    for (const row of result.rows) {
+      const dateKey = formatDateKey(row.tanggal);
+      if (dataMap[dateKey]) {
+        dataMap[dateKey].total_penjualan = parseFloat(row.total_penjualan) || 0;
+        dataMap[dateKey].jumlah_transaksi = parseInt(row.jumlah_transaksi) || 0;
+      }
+    }
+
+    const finalData = resultDates.map(dateStr => dataMap[dateStr]);
+    res.json(finalData);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/dashboard/sales-composition', authenticateToken, async (req, res) => {
+  const days = parseInt(req.query.days) || 30;
+  try {
+    const query = `
+      SELECT 
+        pc.name AS kategori,
+        COALESCE(SUM(ii.quantity * ii.price), 0) AS total_nilai,
+        ROUND(
+          COALESCE(SUM(ii.quantity * ii.price), 0) * 100.0 / 
+          NULLIF(SUM(SUM(ii.quantity * ii.price)) OVER (), 0)
+        , 1) AS persentase
+      FROM invoice_items ii
+      JOIN products p ON p.id = ii.product_id
+      JOIN product_categories pc ON pc.id = p.category_id
+      JOIN sales_invoices si ON si.id = ii.invoice_id
+      WHERE si.date::DATE >= CURRENT_DATE - INTERVAL '1 day' * ($1 - 1)
+        AND si.status != 'Dibatalkan' AND si.status != 'Batal'
+      GROUP BY pc.name
+      ORDER BY total_nilai DESC
+    `;
+    const result = await pool.query(query, [days]);
+    const finalData = result.rows.map(row => ({
+      kategori: row.kategori,
+      total_nilai: parseFloat(row.total_nilai) || 0,
+      persentase: parseFloat(row.persentase) || 0
+    }));
+    res.json(finalData);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 
 // --- Products Routes ---
 app.get('/api/products', authenticateToken, async (req, res) => {
@@ -331,7 +446,9 @@ app.post('/api/products', authenticateToken, async (req, res) => {
   const { id, sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id } = req.body;
   const insertQuery = 'INSERT INTO products (id, sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)';
   try {
-    await pool.query(insertQuery, [id || 'P' + Date.now(), sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id || 'PU-1']);
+    const prefix = await getSetting('prefix_product', 'P');
+    const nextId = await generateNextId(pool, 'products', prefix);
+    await pool.query(insertQuery, [id || nextId, sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id || 'PU-1']);
     res.json({ success: true, message: 'Produk berhasil ditambahkan' });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -397,13 +514,15 @@ app.post('/api/stock-adjust', authenticateToken, async (req, res) => {
     const amount = Math.abs(diff) * costPrice;
     const keterangan = diff > 0 ? 'tambah banyak' : diff < 0 ? 'Menyusut' : 'tidak berubah';
 
-    const ctId = 'SA-' + Date.now();
+    const ctPrefix = await getSetting('prefix_cash_transaction', 'CT');
+    const ctId = await generateNextId(client, 'cash_transactions', ctPrefix);
     const ctDate = new Date().toISOString().split('T')[0];
     const desc = `Stock Opname: [${product_id}] ${productName} | Sebelum: ${oldStock} → Sesudah: ${newStock} | ${keterangan}${note ? ' | ' + note : ''}`;
+    const userId = req.user.id;
 
     await client.query(
-      'INSERT INTO cash_transactions (id, date, type, category, description, amount, method) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [ctId, ctDate, txType, 'Penyesuaian Stok', desc, amount, 'Stock Opname']
+      'INSERT INTO cash_transactions (id, date, type, category, description, amount, method, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [ctId, ctDate, txType, 'Penyesuaian Stok', desc, amount, 'Stock Opname', userId]
     );
     await client.query('COMMIT');
     res.json({ success: true, old_stock: oldStock, new_stock: newStock, type: txType, amount });
@@ -595,35 +714,39 @@ app.get('/api/purchases/:id/items', authenticateToken, async (req, res) => {
 
 app.post('/api/invoices', authenticateToken, async (req, res) => {
   const { customer_id, total, paid, payment_type_id, due_date, items } = req.body;
-  
-  const insertInvoiceQuery = 'INSERT INTO sales_invoices (id, date, customer_id, total, paid_amount, payment_type_id, due_date, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)';
+  const userId = req.user.id;
+
+  const insertInvoiceQuery = 'INSERT INTO sales_invoices (id, date, customer_id, total, paid_amount, payment_type_id, due_date, status, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)';
   const updateStockQuery = 'UPDATE products SET stock = stock - $1 WHERE id = $2';
-  
+
   const date = new Date().toISOString();
   const status = paid >= total ? 'Lunas' : (paid > 0 ? 'Sebagian' : 'Belum Bayar');
-  
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const prefix = await getSetting('prefix_sales', 'INV/{YYYY}/{MM}/');
     const id = await generateNextId(client, 'sales_invoices', prefix);
-    await client.query(insertInvoiceQuery, [id, date, customer_id, total, paid, payment_type_id, due_date, status]);
-    
+    await client.query(insertInvoiceQuery, [id, date, customer_id, total, paid, payment_type_id, due_date, status, userId]);
+
     // Reduce stock
     if (items && Array.isArray(items)) {
       for (const item of items) {
-         await client.query(updateStockQuery, [item.quantity, item.id]);
-         // Also insert to invoice_items
-         await client.query('INSERT INTO invoice_items (id, invoice_id, product_id, quantity, price) VALUES ($1, $2, $3, $4, $5)', [Date.now().toString() + Math.floor(Math.random()*1000), id, item.id, item.quantity, item.price || 0]);
+        await client.query(updateStockQuery, [item.quantity, item.id]);
+        // Also insert to invoice_items
+        await client.query('INSERT INTO invoice_items (id, invoice_id, product_id, quantity, price) VALUES ($1, $2, $3, $4, $5)', [Date.now().toString() + Math.floor(Math.random() * 1000), id, item.id, item.quantity, item.price || 0]);
       }
     }
 
     // Log cash transaction IN
     if (paid > 0) {
-      const ctId = 'CT-' + Date.now() + Math.floor(Math.random()*1000);
+      const ctPrefix = await getSetting('prefix_cash_transaction', 'CT');
+      const ctId = await generateNextId(client, 'cash_transactions', ctPrefix);
       const ctDate = new Date().toISOString().split('T')[0];
-      const method = payment_type_id === 'PT-1' ? 'Tunai' : 'Transfer Bank';
-      await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, invoice_id, payment_type_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [ctId, ctDate, 'IN', 'Penjualan', `DP/Pembayaran Invoice ${id}`, paid, method, id, payment_type_id]);
+      const ptNameRes = await client.query('SELECT name FROM payment_types WHERE id = $1', [payment_type_id]);
+      const method = ptNameRes.rows[0]?.name || 'Transfer Bank';
+      const cashCategory = paid >= total ? 'Penjualan' : 'Pelunasan Piutang';
+      await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, invoice_id, payment_type_id, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)', [ctId, ctDate, 'IN', cashCategory, `Pembayaran Invoice ${id}`, paid, method, id, payment_type_id, userId]);
     }
 
     await client.query('COMMIT');
@@ -637,6 +760,25 @@ app.post('/api/invoices', authenticateToken, async (req, res) => {
 });
 
 // --- Finance Routes ---
+
+app.post('/api/invoices/manual', authenticateToken, async (req, res) => {
+  const { id, date, due_date, customer_id, total, payment_type_id, payment_method } = req.body;
+  const userId = req.user.id;
+
+  if (payment_type_id === 'PT-3') {
+    return res.status(400).json({ error: 'DP tidak diperbolehkan' });
+  }
+
+  const status = 'Belum Bayar';
+  const insertQuery = 'INSERT INTO sales_invoices (id, date, customer_id, subtotal, total, paid_amount, payment_type_id, payment_method, due_date, status, user_id) VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8, $9, $10)';
+
+  try {
+    await pool.query(insertQuery, [id, date, customer_id, total, total, payment_type_id, payment_method, due_date, status, userId]);
+    res.json({ success: true, invoiceId: id });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
 app.get('/api/finance/receivables', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM sales_invoices WHERE status != $1 AND status != $2', ['Lunas', 'Batal']);
@@ -649,34 +791,36 @@ app.get('/api/finance/receivables', authenticateToken, async (req, res) => {
 app.post('/api/finance/receivables/:id/pay', authenticateToken, async (req, res) => {
   const { id } = req.params;
   const { amount } = req.body;
-  
+
   try {
     const result = await pool.query('SELECT * FROM sales_invoices WHERE id = $1', [id]);
     const invoice = result.rows[0];
     if (!invoice) return res.status(404).json({ error: 'Invoice tidak ditemukan' });
-    
+
     const currentPaid = parseFloat(invoice.paid_amount);
     const total = parseFloat(invoice.total);
     const newPaid = currentPaid + parseFloat(amount);
     const newStatus = newPaid >= total ? 'Lunas' : 'Sebagian';
-    
+
     const client = await pool.connect();
     try {
-        await client.query('BEGIN');
-        await client.query('UPDATE sales_invoices SET paid_amount = $1, status = $2 WHERE id = $3', [newPaid, newStatus, id]);
-        
-        // Log cash transaction IN
-        const ctId = 'CT-' + Date.now() + Math.floor(Math.random()*1000);
-        const date = new Date().toISOString().split('T')[0];
-        await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, invoice_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [ctId, date, 'IN', 'Pendapatan', `Pelunasan/Cicilan Invoice ${id}`, amount, 'Transfer Bank', id]);
-        
-        await client.query('COMMIT');
-        res.json({ success: true });
+      await client.query('BEGIN');
+      await client.query('UPDATE sales_invoices SET paid_amount = $1, status = $2 WHERE id = $3', [newPaid, newStatus, id]);
+
+      // Log cash transaction IN
+      const ctPrefix = await getSetting('prefix_cash_transaction', 'CT');
+      const ctId = await generateNextId(client, 'cash_transactions', ctPrefix);
+      const date = new Date().toISOString().split('T')[0];
+      const userId = req.user.id;
+      await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, invoice_id, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [ctId, date, 'IN', 'Pelunasan Piutang', `Pelunasan Invoice ${id}`, amount, 'Transfer Bank', id, userId]);
+
+      await client.query('COMMIT');
+      res.json({ success: true });
     } catch (e) {
-        await client.query('ROLLBACK');
-        throw e;
+      await client.query('ROLLBACK');
+      throw e;
     } finally {
-        client.release();
+      client.release();
     }
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -709,19 +853,20 @@ app.get('/api/finance/cash-flow', authenticateToken, async (req, res) => {
   }
 });
 
-// POST - Catat transaksi kas manual
 app.post('/api/finance/cash-flow', authenticateToken, async (req, res) => {
   const { type, category, description, amount, method, date } = req.body;
+  const userId = req.user.id;
   if (!type || !amount || parseFloat(amount) <= 0) {
     return res.status(400).json({ error: 'Tipe dan jumlah wajib diisi' });
   }
   try {
-    const ctId = 'CT-' + Date.now() + Math.floor(Math.random() * 1000);
+    const ctPrefix = await getSetting('prefix_cash_transaction', 'CT');
+    const ctId = await generateNextId(pool, 'cash_transactions', ctPrefix);
     const ctDate = date || new Date().toISOString().split('T')[0];
     await pool.query(
-      `INSERT INTO cash_transactions (id, date, type, category, description, amount, method, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'active')`,
-      [ctId, ctDate, type, category || 'Lainnya', description || '-', parseFloat(amount), method || 'Transfer Bank']
+      `INSERT INTO cash_transactions (id, date, type, category, description, amount, method, status, user_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8)`,
+      [ctId, ctDate, type, category || 'Lainnya', description || '-', parseFloat(amount), method || 'Transfer Bank', userId]
     );
     res.json({ success: true, id: ctId });
   } catch (err) {
@@ -743,7 +888,7 @@ app.put('/api/finance/cash-flow/:id', authenticateToken, async (req, res) => {
     await pool.query(
       `UPDATE cash_transactions SET type=$1, category=$2, description=$3, amount=$4, method=$5, date=$6 WHERE id=$7`,
       [type || tx.type, category || tx.category, description || tx.description,
-       parseFloat(amount) || tx.amount, method || tx.method, date || tx.date, id]
+      parseFloat(amount) || tx.amount, method || tx.method, date || tx.date, id]
     );
     res.json({ success: true });
   } catch (err) {
@@ -829,7 +974,7 @@ app.patch('/api/finance/cash-flow/:id/cancel', authenticateToken, async (req, re
 app.get('/api/laporan/laba-rugi', authenticateToken, async (req, res) => {
   const bulan = parseInt(req.query.bulan);
   const tahun = parseInt(req.query.tahun);
-  
+
   if (!bulan || !tahun) {
     return res.status(400).json({ error: 'Parameter bulan dan tahun diperlukan' });
   }
@@ -895,7 +1040,7 @@ app.get('/api/laporan/laba-rugi', authenticateToken, async (req, res) => {
         AND EXTRACT(YEAR FROM date) = $2
       GROUP BY type
     `, [bulan, tahun]);
-    
+
     let penyesuaianStokMasuk = 0;
     let penyesuaianStokKeluar = 0;
     resStok.rows.forEach(r => {
@@ -953,9 +1098,243 @@ app.get('/api/laporan/laba-rugi', authenticateToken, async (req, res) => {
   }
 });
 
+// --- Laporan Neraca ---
+app.get('/api/laporan/neraca', authenticateToken, async (req, res) => {
+  const bulan = parseInt(req.query.bulan);
+  const tahun = parseInt(req.query.tahun);
+
+  if (!bulan || !tahun) {
+    return res.status(400).json({ success: false, error: 'Parameter bulan dan tahun diperlukan' });
+  }
+
+  const client = await pool.connect();
+  try {
+    // end_date = last day of selected month
+    const endDateResult = await client.query(
+      `SELECT (DATE_TRUNC('month', MAKE_DATE($1::int, $2::int, 1)) + INTERVAL '1 month' - INTERVAL '1 day')::DATE AS end_date`,
+      [tahun, bulan]
+    );
+    const endDate = endDateResult.rows[0].end_date;
+
+    // 1. Kas & Bank: sum IN - sum OUT from cash_transactions where status='active'
+    const resKas = await client.query(`
+      SELECT
+        COALESCE(SUM(CASE WHEN type = 'IN' THEN amount ELSE 0 END), 0) AS masuk,
+        COALESCE(SUM(CASE WHEN type = 'OUT' THEN amount ELSE 0 END), 0) AS keluar
+      FROM cash_transactions
+      WHERE date::DATE <= $1
+        AND status = 'active'
+    `, [endDate]);
+    const kasBank = parseFloat(resKas.rows[0].masuk) - parseFloat(resKas.rows[0].keluar);
+
+    // 2. Piutang Usaha: sum of (total - paid_amount) for unpaid invoices up to end_date
+    const resPiutang = await client.query(`
+      SELECT COALESCE(SUM(total - paid_amount), 0) AS piutang
+      FROM sales_invoices
+      WHERE status NOT IN ('Lunas', 'Dibatalkan', 'Batal')
+        AND date::DATE <= $1
+    `, [endDate]);
+    const piutangUsaha = parseFloat(resPiutang.rows[0].piutang);
+
+    // 3. Persediaan Barang: current stock value (stock * cost_price)
+    const resPersediaan = await client.query(`
+      SELECT COALESCE(SUM(stock * cost_price), 0) AS persediaan
+      FROM products
+    `);
+    const persediaan = parseFloat(resPersediaan.rows[0].persediaan);
+
+    const totalAset = kasBank + piutangUsaha + persediaan;
+
+    // 4. Hutang Usaha: sum of (total - paid_amount) for unpaid POs up to end_date
+    const resHutang = await client.query(`
+      SELECT COALESCE(SUM(total - paid_amount), 0) AS hutang
+      FROM purchase_orders
+      WHERE status NOT IN ('Selesai', 'Dibatalkan', 'Batal')
+        AND date::DATE <= $1
+    `, [endDate]);
+    const hutangUsaha = parseFloat(resHutang.rows[0].hutang);
+
+    // 5. Hutang Lain-lain: default 0
+    const hutangLain = 0;
+    const totalLiabilitas = hutangUsaha + hutangLain;
+
+    // 6. Modal Pemilik: from settings
+    const resModal = await client.query(`SELECT value FROM settings WHERE key = 'modal_pemilik'`);
+    const modalPemilik = parseFloat(resModal.rows[0]?.value || 0);
+
+    // 7. Laba Ditahan = Total Aset - Total Liabilitas - Modal Pemilik
+    const labaDitahan = totalAset - totalLiabilitas - modalPemilik;
+    const totalEkuitas = modalPemilik + labaDitahan;
+
+    const isBalanced = Math.abs(totalAset - (totalLiabilitas + totalEkuitas)) < 1;
+
+    // Format per_tanggal in Indonesian
+    const monthNamesId = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    const endDateObj = new Date(endDate);
+    const day = endDateObj.getUTCDate();
+    const monthStr = monthNamesId[bulan - 1];
+    const perTanggal = `Per ${day} ${monthStr} ${tahun}`;
+
+    res.json({
+      success: true,
+      data: {
+        per_tanggal: perTanggal,
+        aset: {
+          kas_bank: kasBank,
+          piutang_usaha: piutangUsaha,
+          persediaan: persediaan,
+          total: totalAset
+        },
+        liabilitas: {
+          hutang_usaha: hutangUsaha,
+          hutang_lain: hutangLain,
+          total: totalLiabilitas
+        },
+        ekuitas: {
+          modal_pemilik: modalPemilik,
+          laba_ditahan: labaDitahan,
+          total: totalEkuitas
+        },
+        total_liabilitas_ekuitas: totalLiabilitas + totalEkuitas,
+        is_balanced: isBalanced
+      }
+    });
+
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// --- Laporan Analisis Performa ---
+app.get('/api/laporan/performa', authenticateToken, async (req, res) => {
+  const bulan = parseInt(req.query.bulan);
+  const tahun = parseInt(req.query.tahun);
+
+  if (!bulan || !tahun) {
+    return res.status(400).json({ success: false, error: 'Parameter bulan dan tahun diperlukan' });
+  }
+
+  const client = await pool.connect();
+  try {
+    // Compute start_date and end_date
+    const dateRes = await client.query(`
+      SELECT
+        MAKE_DATE($1::int, $2::int, 1) AS start_date,
+        (DATE_TRUNC('month', MAKE_DATE($1::int, $2::int, 1)) + INTERVAL '1 month' - INTERVAL '1 day')::DATE AS end_date,
+        DATE_PART('day', (DATE_TRUNC('month', MAKE_DATE($1::int, $2::int, 1)) + INTERVAL '1 month' - INTERVAL '1 day')::DATE) AS days_in_month
+    `, [tahun, bulan]);
+    const { start_date, end_date, days_in_month } = dateRes.rows[0];
+
+    // 1. Total penjualan & jumlah invoice
+    const resSales = await client.query(`
+      SELECT
+        COALESCE(SUM(total), 0) AS total_penjualan,
+        COUNT(id) AS jumlah_invoice
+      FROM sales_invoices
+      WHERE date::DATE BETWEEN $1 AND $2
+        AND status != 'Dibatalkan' AND status != 'Batal'
+    `, [start_date, end_date]);
+    const totalPenjualan = parseFloat(resSales.rows[0].total_penjualan);
+    const jumlahInvoice = parseInt(resSales.rows[0].jumlah_invoice);
+
+    const rataHari = jumlahInvoice > 0 ? totalPenjualan / parseInt(days_in_month) : 0;
+    const rataInvoice = jumlahInvoice > 0 ? totalPenjualan / jumlahInvoice : 0;
+
+    // 2. HPP for margin calculation
+    const resHPP = await client.query(`
+      SELECT COALESCE(SUM(ii.quantity * p.cost_price), 0) AS total_hpp
+      FROM invoice_items ii
+      JOIN products p ON p.id = ii.product_id
+      JOIN sales_invoices si ON si.id = ii.invoice_id
+      WHERE si.date::DATE BETWEEN $1 AND $2
+        AND si.status != 'Dibatalkan' AND si.status != 'Batal'
+    `, [start_date, end_date]);
+    const totalHPP = parseFloat(resHPP.rows[0].total_hpp);
+    const margin = totalPenjualan > 0
+      ? ((totalPenjualan - totalHPP) / totalPenjualan) * 100
+      : 0;
+
+    // 3. Customer retention
+    const resRetention = await client.query(`
+      SELECT
+        COUNT(DISTINCT customer_id) AS total_customers,
+        COUNT(DISTINCT CASE WHEN cnt > 1 THEN customer_id END) AS repeat_customers
+      FROM (
+        SELECT customer_id, COUNT(id) AS cnt
+        FROM sales_invoices
+        WHERE date::DATE BETWEEN $1 AND $2
+          AND status != 'Dibatalkan' AND status != 'Batal'
+        GROUP BY customer_id
+      ) sub
+    `, [start_date, end_date]);
+    const totalCustomers = parseInt(resRetention.rows[0].total_customers);
+    const repeatCustomers = parseInt(resRetention.rows[0].repeat_customers);
+    const retention = totalCustomers > 0 ? (repeatCustomers / totalCustomers) * 100 : 0;
+
+    // 4. Top 5 produk terlaris
+    const resProducts = await client.query(`
+      SELECT p.name, COALESCE(SUM(ii.quantity * ii.price), 0) AS total_nilai
+      FROM invoice_items ii
+      JOIN products p ON p.id = ii.product_id
+      JOIN sales_invoices si ON si.id = ii.invoice_id
+      WHERE si.date::DATE BETWEEN $1 AND $2
+        AND si.status != 'Dibatalkan' AND si.status != 'Batal'
+      GROUP BY p.name
+      ORDER BY total_nilai DESC
+      LIMIT 5
+    `, [start_date, end_date]);
+
+    let topProducts = resProducts.rows.map(r => ({
+      name: r.name,
+      total_nilai: parseFloat(r.total_nilai)
+    }));
+    if (topProducts.length === 0) {
+      const resFallback = await client.query(`SELECT name FROM products LIMIT 5`);
+      topProducts = resFallback.rows.map(r => ({ name: r.name, total_nilai: 0 }));
+    }
+
+    // 5. Top 5 pelanggan teratas
+    const resCustomers = await client.query(`
+      SELECT c.name, COALESCE(SUM(si.total), 0) AS total_belanja
+      FROM sales_invoices si
+      JOIN customers c ON c.id = si.customer_id
+      WHERE si.date::DATE BETWEEN $1 AND $2
+        AND si.status != 'Dibatalkan' AND si.status != 'Batal'
+      GROUP BY c.name
+      ORDER BY total_belanja DESC
+      LIMIT 5
+    `, [start_date, end_date]);
+    const topCustomers = resCustomers.rows.map(r => ({
+      name: r.name,
+      total_belanja: parseFloat(r.total_belanja)
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        rata_hari: rataHari,
+        rata_invoice: rataInvoice,
+        jumlah_invoice: jumlahInvoice,
+        margin: margin,
+        retention: retention,
+        top_products: topProducts,
+        top_customers: topCustomers,
+        has_data: jumlahInvoice > 0
+      }
+    });
+
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 app.get('/api/finance/payables', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query('SELECT po.*, v.name as vendor_name FROM purchase_orders po LEFT JOIN vendors v ON po.vendor_id = v.id WHERE po.status != $1 AND po.status != $2', ['Selesai', 'Batal']);
+    const result = await pool.query('SELECT po.*, v.name as vendor_name, pt.name as payment_type_name FROM purchase_orders po LEFT JOIN vendors v ON po.vendor_id = v.id LEFT JOIN payment_types pt ON po.payment_type_id = pt.id WHERE po.status != $1 AND po.status != $2', ['Selesai', 'Batal']);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -967,7 +1346,7 @@ app.post('/api/finance/payables/:id/pay', authenticateToken, async (req, res) =>
   const { id } = req.params;
   const { amount } = req.body;
   const payAmount = parseFloat(amount || 0);
-  
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -977,20 +1356,28 @@ app.post('/api/finance/payables/:id/pay', authenticateToken, async (req, res) =>
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'PO tidak ditemukan' });
     }
-    
+
+    const pType = req.body.payment_type_id || po.payment_type_id;
+    const ptRes = await client.query(
+      'SELECT name FROM payment_types WHERE id = $1',
+      [pType]
+    );
+    const payMethodStr = ptRes.rows[0]?.name || 'Transfer Bank';
+
     const currentPaid = parseFloat(po.paid_amount || 0);
     const total = parseFloat(po.total || 0);
     const newPaid = currentPaid + payAmount;
     const newStatus = newPaid >= total ? 'Selesai' : 'Dalam Proses';
-    
+
     await client.query('UPDATE purchase_orders SET paid_amount = $1, status = $2 WHERE id = $3', [newPaid, newStatus, id]);
-    
+
     // Log cash transaction OUT
-    const ctId = 'CT-' + Date.now() + Math.floor(Math.random()*1000);
+    const ctPrefix = await getSetting('prefix_cash_transaction', 'CT');
+    const ctId = await generateNextId(client, 'cash_transactions', ctPrefix);
     const date = new Date().toISOString().split('T')[0];
-    const payMethodStr = (req.body.payment_method) || (po.payment_type_id === 'PT-1' ? 'Tunai' : 'Transfer Bank');
-    await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, purchase_order_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [ctId, date, 'OUT', 'Pembelian Stok', `Bayar Cicilan PO ${id}`, payAmount, payMethodStr, id]);
-    
+    const userId = req.user.id;
+    await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, purchase_order_id, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [ctId, date, 'OUT', 'Pembelian Stok', `Pelunasan ${id}`, payAmount, payMethodStr, id, userId]);
+
     await client.query('COMMIT');
     res.json({ success: true });
   } catch (err) {
@@ -1080,32 +1467,35 @@ app.post('/api/purchases', authenticateToken, async (req, res) => {
   const finalTotal = parseFloat(total || 0);
   const status = finalPaid >= finalTotal ? 'Selesai' : 'Dalam Proses';
   const poDate = date || new Date().toISOString().split('T')[0];
-  
+  const userId = req.user.id;
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const prefix = await getSetting('prefix_purchase', 'PO/{YYYY}/{MM}/');
     const poId = await generateNextId(client, 'purchase_orders', prefix);
-    await client.query('INSERT INTO purchase_orders (id, date, vendor_id, total, paid_amount, payment_type_id, due_date, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [poId, poDate, vId, finalTotal, finalPaid, pType, due_date, status]);
-    
+    await client.query('INSERT INTO purchase_orders (id, date, vendor_id, total, paid_amount, payment_type_id, due_date, status, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [poId, poDate, vId, finalTotal, finalPaid, pType, due_date, status, userId]);
+
     if (items && Array.isArray(items)) {
       for (const item of items) {
-        const itemId = 'POI-' + Date.now() + Math.floor(Math.random()*1000);
+        const itemId = 'POI-' + Date.now() + Math.floor(Math.random() * 1000);
         const prodId = item.product_id || item.id;
         const qty = parseFloat(item.quantity || item.qty || 0);
         const cost = parseFloat(item.cost || item.cost_price || item.price || 0);
-        
+
         await client.query('INSERT INTO purchase_order_items (id, purchase_order_id, product_id, quantity, cost) VALUES ($1, $2, $3, $4, $5)', [itemId, poId, prodId, qty, cost]);
         await client.query('UPDATE products SET stock = stock + $1 WHERE id = $2', [qty, prodId]);
       }
     }
-    
+
     if (finalPaid > 0) {
-      const ctId = 'CT-' + Date.now() + Math.floor(Math.random()*1000);
-      const method = pType === 'PT-1' ? 'Tunai' : 'Transfer Bank';
-      await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, purchase_order_id, payment_type_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [ctId, poDate, 'OUT', 'Pembelian Stok', `Bayar PO ${poId}`, finalPaid, method, poId, pType]);
+      const ctPrefix = await getSetting('prefix_cash_transaction', 'CT');
+      const ctId = await generateNextId(client, 'cash_transactions', ctPrefix);
+      const ptNameRes = await client.query('SELECT name FROM payment_types WHERE id = $1', [pType]);
+      const method = ptNameRes.rows[0]?.name || 'Transfer Bank';
+      await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, purchase_order_id, payment_type_id, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)', [ctId, poDate, 'OUT', 'Pembelian Stok', `Bayar ${poId}`, finalPaid, method, poId, pType, userId]);
     }
-    
+
     await client.query('COMMIT');
     res.json({ success: true, id: poId });
   } catch (err) {
@@ -1125,38 +1515,42 @@ app.put('/api/purchases/:id', authenticateToken, async (req, res) => {
   const finalTotal = parseFloat(total || 0);
   const status = finalPaid >= finalTotal ? 'Selesai' : 'Dalam Proses';
   const poDate = date || new Date().toISOString().split('T')[0];
-  
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
+
     const oldItemsRes = await client.query('SELECT product_id, quantity FROM purchase_order_items WHERE purchase_order_id = $1', [poId]);
     for (const item of oldItemsRes.rows) {
       await client.query('UPDATE products SET stock = stock - $1 WHERE id = $2', [item.quantity, item.product_id]);
     }
-    
+
     await client.query('DELETE FROM purchase_order_items WHERE purchase_order_id = $1', [poId]);
-    
+
     if (items && Array.isArray(items)) {
       for (const item of items) {
-        const itemId = 'POI-' + Date.now() + Math.floor(Math.random()*1000);
+        const itemId = 'POI-' + Date.now() + Math.floor(Math.random() * 1000);
         const prodId = item.product_id || item.id;
         const qty = parseFloat(item.quantity || item.qty || 0);
         const cost = parseFloat(item.cost || item.cost_price || item.price || 0);
-        
+
         await client.query('INSERT INTO purchase_order_items (id, purchase_order_id, product_id, quantity, cost) VALUES ($1, $2, $3, $4, $5)', [itemId, poId, prodId, qty, cost]);
         await client.query('UPDATE products SET stock = stock + $1 WHERE id = $2', [qty, prodId]);
       }
     }
-    
+
     await client.query('UPDATE purchase_orders SET date = $1, vendor_id = $2, total = $3, paid_amount = $4, status = $5, payment_type_id = $6, due_date = $7 WHERE id = $8', [poDate, vId, finalTotal, finalPaid, status, pType, due_date, poId]);
-    
+
     await client.query('DELETE FROM cash_transactions WHERE purchase_order_id = $1', [poId]);
     if (finalPaid > 0) {
-      const ctId = 'CT-' + Date.now() + Math.floor(Math.random()*1000);
-      await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, purchase_order_id, payment_type_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [ctId, poDate, 'OUT', 'Pembelian Stok', `Bayar PO ${poId} (Edit)`, finalPaid, 'Transfer Bank', poId, pType]);
+      const ctPrefix = await getSetting('prefix_cash_transaction', 'CT');
+      const ctId = await generateNextId(client, 'cash_transactions', ctPrefix);
+      const userId = req.user.id;
+      const ptNameRes = await client.query('SELECT name FROM payment_types WHERE id = $1', [pType]);
+      const methodEdit = ptNameRes.rows[0]?.name || 'Transfer Bank';
+      await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, purchase_order_id, payment_type_id, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)', [ctId, poDate, 'OUT', 'Pembelian Stok', `Bayar PO ${poId} (Edit)`, finalPaid, methodEdit, poId, pType, userId]);
     }
-    
+
     await client.query('COMMIT');
     res.json({ success: true });
   } catch (err) {
@@ -1172,7 +1566,7 @@ app.put('/api/purchases/:id/cancel', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
+
     const checkRes = await client.query('SELECT status FROM purchase_orders WHERE id = $1', [poId]);
     if (checkRes.rows.length === 0) {
       await client.query('ROLLBACK');
@@ -1182,15 +1576,15 @@ app.put('/api/purchases/:id/cancel', authenticateToken, async (req, res) => {
       await client.query('ROLLBACK');
       return res.json({ success: true });
     }
-    
+
     const itemsRes = await client.query('SELECT product_id, quantity FROM purchase_order_items WHERE purchase_order_id = $1', [poId]);
     for (const item of itemsRes.rows) {
       await client.query('UPDATE products SET stock = stock - $1 WHERE id = $2', [item.quantity, item.product_id]);
     }
-    
+
     await client.query('UPDATE purchase_orders SET status = $1 WHERE id = $2', ['Batal', poId]);
     await client.query('DELETE FROM cash_transactions WHERE purchase_order_id = $1', [poId]);
-    
+
     await client.query('COMMIT');
     res.json({ success: true });
   } catch (err) {
@@ -1211,43 +1605,47 @@ app.put('/api/invoices/:id', authenticateToken, async (req, res) => {
   const finalTotal = parseFloat(total || 0);
   const status = finalPaid >= finalTotal ? 'Lunas' : (finalPaid > 0 ? 'Sebagian' : 'Belum Bayar');
   const invDate = date || new Date().toISOString().split('T')[0];
-  
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
+
     const oldItemsRes = await client.query('SELECT product_id, quantity FROM invoice_items WHERE invoice_id = $1', [invId]);
     for (const item of oldItemsRes.rows) {
       await client.query('UPDATE products SET stock = stock + $1 WHERE id = $2', [item.quantity, item.product_id]);
     }
-    
+
     await client.query('DELETE FROM invoice_items WHERE invoice_id = $1', [invId]);
-    
+
     if (items && Array.isArray(items)) {
       for (const item of items) {
-        const itemId = 'IVI-' + Date.now() + Math.floor(Math.random()*1000);
+        const itemId = 'IVI-' + Date.now() + Math.floor(Math.random() * 1000);
         const prodId = item.product_id || item.id;
         const qty = parseFloat(item.quantity || item.qty || 0);
         const price = parseFloat(item.price || item.sell_price || 0);
-        
+
         await client.query('INSERT INTO invoice_items (id, invoice_id, product_id, quantity, price) VALUES ($1, $2, $3, $4, $5)', [itemId, invId, prodId, qty, price]);
         await client.query('UPDATE products SET stock = stock - $1 WHERE id = $2', [qty, prodId]);
       }
     }
-    
+
     if (due_date !== undefined) {
       await client.query('UPDATE sales_invoices SET date = $1, customer_id = $2, subtotal = $3, total = $4, paid_amount = $5, status = $6, payment_type_id = $7, due_date = $8 WHERE id = $9', [invDate, custId, finalTotal, finalTotal, finalPaid, status, pType, due_date, invId]);
     } else {
       await client.query('UPDATE sales_invoices SET date = $1, customer_id = $2, subtotal = $3, total = $4, paid_amount = $5, status = $6, payment_type_id = $7 WHERE id = $8', [invDate, custId, finalTotal, finalTotal, finalPaid, status, pType, invId]);
     }
-    
+
     await client.query('DELETE FROM cash_transactions WHERE invoice_id = $1 AND invoice_id IS NOT NULL AND (status IS NULL OR status = \'active\')', [invId]);
     if (finalPaid > 0) {
-      const ctId = 'CT-' + Date.now() + Math.floor(Math.random()*1000);
-      const methodEdit = pType === 'PT-1' ? 'Tunai' : 'Transfer Bank';
-      await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, invoice_id, payment_type_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)', [ctId, invDate, 'IN', 'Penjualan', `Pembayaran INV ${invId} (Edit)`, finalPaid, methodEdit, invId, pType]);
+      const ctPrefix = await getSetting('prefix_cash_transaction', 'CT');
+      const ctId = await generateNextId(client, 'cash_transactions', ctPrefix);
+      const ptNameRes = await client.query('SELECT name FROM payment_types WHERE id = $1', [pType]);
+      const methodEdit = ptNameRes.rows[0]?.name || 'Transfer Bank';
+      const userId = req.user.id;
+      const cashCategory = finalPaid >= finalTotal ? 'Penjualan' : 'Pelunasan Piutang';
+      await client.query('INSERT INTO cash_transactions (id, date, type, category, description, amount, method, invoice_id, payment_type_id, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)', [ctId, invDate, 'IN', cashCategory, `Pembayaran INV ${invId} (Edit)`, finalPaid, methodEdit, invId, pType, userId]);
     }
-    
+
     await client.query('COMMIT');
     res.json({ success: true });
   } catch (err) {
@@ -1263,7 +1661,7 @@ app.put('/api/invoices/:id/cancel', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
+
     const checkRes = await client.query('SELECT status FROM sales_invoices WHERE id = $1', [invId]);
     if (checkRes.rows.length === 0) {
       await client.query('ROLLBACK');
@@ -1273,15 +1671,15 @@ app.put('/api/invoices/:id/cancel', authenticateToken, async (req, res) => {
       await client.query('ROLLBACK');
       return res.json({ success: true });
     }
-    
+
     const itemsRes = await client.query('SELECT product_id, quantity FROM invoice_items WHERE invoice_id = $1', [invId]);
     for (const item of itemsRes.rows) {
       await client.query('UPDATE products SET stock = stock + $1 WHERE id = $2', [item.quantity, item.product_id]);
     }
-    
+
     await client.query('UPDATE sales_invoices SET status = $1 WHERE id = $2', ['Batal', invId]);
     await client.query('DELETE FROM cash_transactions WHERE invoice_id = $1', [invId]);
-    
+
     await client.query('COMMIT');
     res.json({ success: true });
   } catch (err) {
@@ -1312,9 +1710,10 @@ app.get('/api/finance/cashflow', authenticateToken, async (req, res) => {
 
 app.post('/api/finance/cashflow', authenticateToken, async (req, res) => {
   const { type, category, description, amount, method, date } = req.body;
-  const ctId = 'CT-' + Date.now();
   const ctDate = date || new Date().toISOString().split('T')[0];
   try {
+    const ctPrefix = await getSetting('prefix_cash_transaction', 'CT');
+    const ctId = await generateNextId(pool, 'cash_transactions', ctPrefix);
     await pool.query(
       'INSERT INTO cash_transactions (id, date, type, category, description, amount, method) VALUES ($1, $2, $3, $4, $5, $6, $7)',
       [ctId, ctDate, type, category, description, parseFloat(amount), method]
@@ -1330,7 +1729,7 @@ app.get('/api/finance/reports/profit-loss', authenticateToken, async (req, res) 
   try {
     const salesRes = await pool.query("SELECT SUM(total) as revenue FROM sales_invoices WHERE status != 'Batal'");
     const revenue = parseFloat(salesRes.rows[0].revenue || 0);
-    
+
     const hppRes = await pool.query(`
       SELECT SUM(ii.quantity * p.cost_price) as hpp 
       FROM invoice_items ii
@@ -1339,14 +1738,14 @@ app.get('/api/finance/reports/profit-loss', authenticateToken, async (req, res) 
       WHERE si.status != 'Batal'
     `);
     const hpp = parseFloat(hppRes.rows[0].hpp || 0);
-    
+
     const expensesRes = await pool.query(`
       SELECT category, SUM(amount) as total 
       FROM cash_transactions 
       WHERE type = 'OUT' AND category NOT IN ('Pembelian Stok', 'Hutang')
       GROUP BY category
     `);
-    
+
     res.json({
       revenue,
       hpp,
@@ -1365,16 +1764,16 @@ app.get('/api/finance/reports/balance-sheet', authenticateToken, async (req, res
     const cashInRes = await pool.query("SELECT SUM(amount) as total FROM cash_transactions WHERE type = 'IN'");
     const cashOutRes = await pool.query("SELECT SUM(amount) as total FROM cash_transactions WHERE type = 'OUT'");
     const cash = parseFloat(cashInRes.rows[0].total || 0) - parseFloat(cashOutRes.rows[0].total || 0);
-    
+
     const piutangRes = await pool.query("SELECT SUM(total - paid_amount) as total FROM sales_invoices WHERE status != 'Batal'");
     const piutang = parseFloat(piutangRes.rows[0].total || 0);
-    
+
     const inventoryRes = await pool.query("SELECT SUM(stock * cost_price) as total FROM products");
     const persediaan = parseFloat(inventoryRes.rows[0].total || 0);
-    
+
     const hutangRes = await pool.query("SELECT SUM(total - paid_amount) as total FROM purchase_orders WHERE status != 'Batal'");
     const hutang = parseFloat(hutangRes.rows[0].total || 0);
-    
+
     res.json({
       cash,
       piutang,
@@ -1398,7 +1797,7 @@ app.get('/api/reports/insights', authenticateToken, async (req, res) => {
       ORDER BY value DESC
       LIMIT 5
     `);
-    
+
     const topCustomersRes = await pool.query(`
       SELECT c.name, SUM(si.total) as value
       FROM sales_invoices si
@@ -1408,7 +1807,7 @@ app.get('/api/reports/insights', authenticateToken, async (req, res) => {
       ORDER BY value DESC
       LIMIT 5
     `);
-    
+
     res.json({
       topProducts: topProductsRes.rows.map(r => ({ name: r.name, value: parseFloat(r.value) })),
       topCustomers: topCustomersRes.rows.map(r => ({ name: r.name, value: parseFloat(r.value) }))
@@ -1423,7 +1822,7 @@ app.post('/api/products/:id/stock-adjustment', authenticateToken, async (req, re
   const prodId = req.params.id;
   const { actual_stock, reason } = req.body;
   const finalActual = parseFloat(actual_stock);
-  
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1432,22 +1831,23 @@ app.post('/api/products/:id/stock-adjustment', authenticateToken, async (req, re
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Produk tidak ditemukan' });
     }
-    
+
     const systemStock = parseFloat(prodRes.rows[0].stock || 0);
     const diff = finalActual - systemStock;
     if (diff === 0) {
       await client.query('ROLLBACK');
       return res.json({ success: true, message: 'Tidak ada perbedaan stok' });
     }
-    
+
     const type = diff > 0 ? 'IN' : 'OUT';
     const qty = Math.abs(diff);
     const adjId = 'ADJ-' + Date.now();
     const date = new Date().toISOString().split('T')[0];
-    
-    await client.query('INSERT INTO stock_adjustments (id, product_id, type, quantity, reason, adjustment_date) VALUES ($1, $2, $3, $4, $5, $6)', [adjId, prodId, type, qty, reason, date]);
+    const userId = req.user.id;
+
+    await client.query('INSERT INTO stock_adjustments (id, product_id, type, quantity, reason, adjustment_date, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7)', [adjId, prodId, type, qty, reason, date, userId]);
     await client.query('UPDATE products SET stock = $1 WHERE id = $2', [finalActual, prodId]);
-    
+
     await client.query('COMMIT');
     res.json({ success: true });
   } catch (err) {
