@@ -46,10 +46,19 @@ INSERT INTO cash_categories (id, name, type, is_system) VALUES
   (2, 'Pelunasan Piutang', 'IN', true),
   (3, 'Pembelian Stok', 'OUT', true),
   (4, 'Penyesuaian Stok', 'OUT', true),
-  (5, 'Operasional', 'OUT', false),
-  (6, 'Gaji', 'OUT', false),
+  (5, 'Pelunasan Hutang', 'OUT', true),
+  (6, 'Gaji & Tunjangan', 'OUT', false),
   (7, 'Sewa', 'OUT', false),
-  (8, 'Lainnya', 'BOTH', false)
+  (8, 'Operasional', 'OUT', false),
+  (9, 'Marketing', 'OUT', false),
+  (10, 'Pajak', 'OUT', false),
+  (11, 'Pembelian Aset', 'OUT', false),
+  (12, 'Prive Pemilik', 'OUT', false),
+  (13, 'Pengeluaran Lainnya', 'OUT', false),
+  (14, 'Pendapatan Lainnya', 'IN', false),
+  (15, 'Pinjaman Masuk', 'IN', false),
+  (16, 'Setoran Modal', 'IN', false),
+  (17, 'Transfer Antar Kas/Bank', 'BOTH', false)
 ON CONFLICT (id) DO NOTHING;
 SELECT setval('cash_categories_id_seq', (SELECT COALESCE(MAX(id), 1) FROM cash_categories));
 

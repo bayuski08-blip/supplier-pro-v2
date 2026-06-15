@@ -901,13 +901,16 @@ function renderPiutang(filter = '') {
 
     // Table
     const tbody = document.getElementById('piutang-body');
-    // Show all invoices that are not "Lunas" or "Batal"
-    let filtered = INVOICES.filter(i => !['lunas', 'batal'].includes(i.status.toLowerCase()));
+    // Hide 'batal' (cancelled) invoices by default
+    let filtered = INVOICES.filter(i => i.status.toLowerCase() !== 'batal');
+    
     if (filter && filter !== 'all') {
-        // 'belum' filter matches both 'Belum Bayar' and legacy 'belum' statuses
-        filtered = filtered.filter(i => filter === 'belum'
-            ? i.status.toLowerCase().includes('belum')
-            : i.status.toLowerCase() === filter);
+        filtered = filtered.filter(i => {
+            if (filter === 'belum bayar' || filter === 'belum') {
+                return i.status.toLowerCase().includes('belum');
+            }
+            return i.status.toLowerCase() === filter;
+        });
     }
     const searchEl = document.getElementById('piutang-search');
     if (searchEl && searchEl.value) {
@@ -962,10 +965,13 @@ function renderHutang(filter = '') {
     // Convert purchases to hutang rows
     const tbody = document.getElementById('hutang-body');
     let purchaseData = PURCHASES;
+    
     if (filter === 'lunas') {
         purchaseData = PURCHASES.filter(p => p.paid >= p.total);
-    } else if (filter === 'belum') {
-        purchaseData = PURCHASES.filter(p => p.paid < p.total);
+    } else if (filter === 'belum bayar' || filter === 'belum') {
+        purchaseData = PURCHASES.filter(p => parseFloat(p.paid) === 0);
+    } else if (filter === 'sebagian') {
+        purchaseData = PURCHASES.filter(p => p.paid > 0 && p.paid < p.total);
     }
     const searchEl = document.getElementById('hutang-search');
     if (searchEl && searchEl.value) {
@@ -1823,6 +1829,54 @@ function onPurchasePaymentTypeChange(mode) {
 
 // ---------- Initialize Everything ----------
 async function init() {
+    // Update dashboard subtitle & sidebar user info with logged-in user details
+    const userDisplayName = localStorage.getItem('name') || localStorage.getItem('username') || 'User';
+    const userRole = localStorage.getItem('role') || 'Staff';
+    const capitalizedRole = userRole.charAt(0).toUpperCase() + userRole.slice(1).toLowerCase();
+    
+    PAGE_TITLES.dashboard.subtitle = `Selamat Datang, ${userDisplayName} 👋`;
+    const subtitleEl = document.getElementById('topbar-subtitle');
+    if (subtitleEl && currentPage === 'dashboard') {
+        subtitleEl.textContent = PAGE_TITLES.dashboard.subtitle;
+    }
+
+    const sidebarAvatarEl = document.querySelector('.sidebar-user-avatar');
+    const sidebarNameEl = document.querySelector('.sidebar-user-name');
+    const sidebarRoleEl = document.querySelector('.sidebar-user-role');
+    
+    if (sidebarNameEl) sidebarNameEl.textContent = userDisplayName;
+    if (sidebarRoleEl) sidebarRoleEl.textContent = capitalizedRole;
+    if (sidebarAvatarEl) {
+        const parts = userDisplayName.trim().split(/\s+/);
+        const initials = parts.length === 1 
+            ? parts[0].charAt(0).toUpperCase() 
+            : (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+        sidebarAvatarEl.textContent = initials;
+    }
+
+    // Logout handler
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            localStorage.removeItem('token');
+            localStorage.removeItem('username');
+            localStorage.removeItem('role');
+            localStorage.removeItem('name');
+            sessionStorage.clear();
+            window.location.href = 'login.html';
+        });
+    }
+
+    // Settings shortcut handler
+    const settingsShortcutBtn = document.getElementById('settings-shortcut-btn');
+    if (settingsShortcutBtn) {
+        settingsShortcutBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            navigateTo('settings');
+        });
+    }
+
     // Render empty placeholders while loading
     renderDashboard();
     renderProducts();
@@ -3394,7 +3448,8 @@ const MASTER_LABELS = {
     product_units: 'Satuan Produk',
     customer_categories: 'Kategori Pelanggan',
     vendor_categories: 'Kategori Vendor',
-    payment_types: 'Tipe Pembayaran'
+    payment_types: 'Tipe Pembayaran',
+    cash_categories: 'Kategori Arus Kas'
 };
 
 const MASTER_API_MAP = {
@@ -3402,7 +3457,8 @@ const MASTER_API_MAP = {
     product_units: 'product-units',
     customer_categories: 'customer-categories',
     vendor_categories: 'vendor-categories',
-    payment_types: 'payment-types'
+    payment_types: 'payment-types',
+    cash_categories: 'cash-categories'
 };
 
 async function fetchMasterData(type) {
@@ -3432,45 +3488,85 @@ function renderMasterTable(data) {
     table.style.display = '';
     emptyState.style.display = 'none';
 
-    tbody.innerHTML = data.map(row => `
+    const isCashCat = currentMasterType === 'cash_categories';
+
+    const typeBadge = (type) => {
+        const map = { IN: ['Kas Masuk','#059669','#d1fae5'], OUT: ['Kas Keluar','#dc2626','#fee2e2'], BOTH: ['Keduanya','#7c3aed','#ede9fe'] };
+        const [label, color, bg] = map[type] || [type,'#6b7280','#f3f4f6'];
+        return `<span style="background:${bg};color:${color};font-size:0.7rem;font-weight:600;padding:0.15rem 0.45rem;border-radius:999px;">${label}</span>`;
+    };
+
+    const systemBadge = (is_system) => is_system
+        ? `<span style="background:#dbeafe;color:#1d4ed8;font-size:0.7rem;font-weight:600;padding:0.15rem 0.45rem;border-radius:999px;">Sistem</span>`
+        : '';
+
+    tbody.innerHTML = data.map(row => {
+        const encodedName = row.name.replace(/'/g, "\\'");
+        const editArgs = isCashCat
+            ? `'${row.id}', '${encodedName}', '${row.type}', ${!!row.is_system}`
+            : `'${row.id}', '${encodedName}'`;
+        const canDelete = !isCashCat || !row.is_system;
+        return `
         <tr>
             <td style="font-family: monospace; color: var(--gray-500); font-size: 0.8rem;">${row.id}</td>
-            <td style="font-weight: 600;">${row.name}</td>
+            <td style="font-weight: 600;">
+                ${row.name}
+                ${isCashCat ? typeBadge(row.type) + ' ' + systemBadge(row.is_system) : ''}
+            </td>
             <td style="text-align: right;">
                 <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;"
-                    onclick="openEditMasterModal('${row.id}', '${row.name.replace(/'/g, "\\'")}')"
+                    onclick="openEditMasterModal(${editArgs})"
                     title="Edit">
                     <i data-lucide="edit-2" style="width:14px;height:14px;margin:0;"></i>
                 </button>
-                <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--rose-600);"
-                    onclick="openDeleteMasterModal('${row.id}', '${row.name.replace(/'/g, "\\'")}')"
+                ${canDelete ? `<button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: var(--rose-600);"
+                    onclick="openDeleteMasterModal('${row.id}', '${encodedName}')"
                     title="Hapus">
                     <i data-lucide="trash-2" style="width:14px;height:14px;margin:0;"></i>
-                </button>
+                </button>` : ''}
             </td>
         </tr>
-    `).join('');
+    `; }).join('');
 
     if (window.lucide) lucide.createIcons();
 }
 
+function _toggleCashCatFields(show) {
+    const row = document.getElementById('master-data-cashcat-row');
+    const idRow = document.getElementById('master-data-id-row');
+    if (row) row.style.display = show ? '' : 'none';
+    if (idRow) idRow.style.display = show ? 'none' : ''; // cash_categories use serial ID
+}
+
 function openAddMasterModal() {
+    const isCashCat = currentMasterType === 'cash_categories';
     document.getElementById('modal-master-data-title').textContent =
         'Tambah ' + (MASTER_LABELS[currentMasterType] || 'Data Master');
     document.getElementById('master-data-edit-id').value = '';
     document.getElementById('master-data-id').value = '';
     document.getElementById('master-data-id').disabled = false;
     document.getElementById('master-data-name').value = '';
+    if (document.getElementById('master-data-cashcat-type')) {
+        document.getElementById('master-data-cashcat-type').value = 'IN';
+        document.getElementById('master-data-cashcat-is-system').checked = false;
+    }
+    _toggleCashCatFields(isCashCat);
     openModal('modal-master-data');
 }
 
-function openEditMasterModal(id, name) {
+function openEditMasterModal(id, name, type, is_system) {
+    const isCashCat = currentMasterType === 'cash_categories';
     document.getElementById('modal-master-data-title').textContent =
         'Edit ' + (MASTER_LABELS[currentMasterType] || 'Data Master');
     document.getElementById('master-data-edit-id').value = id;
     document.getElementById('master-data-id').value = id;
-    document.getElementById('master-data-id').disabled = true; // ID tidak boleh diubah saat edit
+    document.getElementById('master-data-id').disabled = true;
     document.getElementById('master-data-name').value = name;
+    if (isCashCat && document.getElementById('master-data-cashcat-type')) {
+        document.getElementById('master-data-cashcat-type').value = type || 'BOTH';
+        document.getElementById('master-data-cashcat-is-system').checked = !!is_system;
+    }
+    _toggleCashCatFields(isCashCat);
     openModal('modal-master-data');
 }
 
@@ -3478,7 +3574,7 @@ async function saveMasterData() {
     const editId = document.getElementById('master-data-edit-id').value;
     const id = document.getElementById('master-data-id').value.trim();
     const name = document.getElementById('master-data-name').value.trim();
-    const apiKey = MASTER_API_MAP[currentMasterType];
+    const isCashCat = currentMasterType === 'cash_categories';
 
     if (!name) {
         alert('Nama tidak boleh kosong.');
@@ -3488,7 +3584,15 @@ async function saveMasterData() {
     const isEdit = !!editId;
     const url = isEdit ? `/api/master/${currentMasterType}/${editId}` : `/api/master/${currentMasterType}`;
     const method = isEdit ? 'PUT' : 'POST';
-    const body = isEdit ? { name } : { id: id || undefined, name };
+
+    let body;
+    if (isCashCat) {
+        const type = document.getElementById('master-data-cashcat-type')?.value || 'BOTH';
+        const is_system = document.getElementById('master-data-cashcat-is-system')?.checked || false;
+        body = { name, type, is_system };
+    } else {
+        body = isEdit ? { name } : { id: id || undefined, name };
+    }
 
     try {
         const res = await fetch(url, {
@@ -3500,6 +3604,7 @@ async function saveMasterData() {
         if (result.success) {
             closeModal('modal-master-data');
             fetchMasterData();
+            populateMasterDropdowns(); // refresh all dropdowns after master change
         } else {
             alert('Gagal menyimpan: ' + (result.error || 'Error tidak diketahui'));
         }
@@ -3688,7 +3793,7 @@ window.onCashTypeChange = (prefix) => {
     if (!typeEl || !catEl) return;
     
     const selectedType = typeEl.value;
-    const filteredCats = CASH_CATEGORIES.filter(c => c.type === selectedType || c.type === 'ALL');
+    const filteredCats = CASH_CATEGORIES.filter(c => c.type === selectedType || c.type === 'BOTH');
     
     catEl.innerHTML = filteredCats.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
 };
@@ -3776,4 +3881,578 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-});
+});
+
+// ==========================================================================
+// EXCEL IMPORT & EXPORT SYSTEM (PRD2 Master Data Update)
+// ==========================================================================
+let currentImportSection = null;
+let selectedImportFile = null;
+
+const sectionTitles = {
+    'produk': 'Produk',
+    'pelanggan': 'Pelanggan',
+    'vendor': 'Vendor',
+    'pembelian': 'Pembelian',
+    'invoice': 'Invoice'
+};
+
+function openImportModal(section) {
+    currentImportSection = section;
+    selectedImportFile = null;
+    
+    // Set Title
+    const titleEl = document.getElementById('import-modal-title');
+    if (titleEl) titleEl.innerText = `Import Data ${sectionTitles[section] || section}`;
+
+    // Reset Dropzone & Input
+    const fileInput = document.getElementById('import-file-input');
+    if (fileInput) fileInput.value = '';
+
+    // Reset Modal States
+    document.getElementById('import-state-initial').style.display = 'block';
+    document.getElementById('import-state-progress').style.display = 'none';
+    document.getElementById('import-state-result').style.display = 'none';
+
+    // Show normal footer buttons
+    const footer = document.getElementById('import-modal-footer');
+    footer.style.display = 'flex';
+    footer.innerHTML = `
+        <button class="btn-toolbar secondary" id="import-btn-cancel" onclick="closeImportModal()">Batal</button>
+        <button class="btn-toolbar primary" id="import-btn-submit" onclick="startImportProcess()"
+            style="opacity:0.5;cursor:not-allowed;pointer-events:none;">
+            <i data-lucide="upload"></i> Proses Import
+        </button>
+    `;
+
+    setImportFile(null);
+
+    // Show modal
+    openModal('modal-import-unified');
+}
+
+function closeImportModal() {
+    closeModal('modal-import-unified');
+    currentImportSection = null;
+    selectedImportFile = null;
+}
+
+function handleImportDrop(e) {
+    e.preventDefault();
+    const dropzone = document.getElementById('import-dropzone');
+    if (dropzone) {
+        dropzone.style.borderColor = '#CBD5E1';
+        dropzone.style.background = 'var(--gray-50)';
+    }
+    if (e.dataTransfer.files.length > 0) {
+        setImportFile(e.dataTransfer.files[0]);
+    }
+}
+
+function handleImportFileSelect(input) {
+    if (input.files.length > 0) {
+        setImportFile(input.files[0]);
+    }
+}
+
+function setImportFile(file) {
+    selectedImportFile = file;
+    const contentDiv = document.getElementById('import-dropzone-content');
+    const btnSubmit = document.getElementById('import-btn-submit');
+
+    if (!file) {
+        if (contentDiv) {
+            contentDiv.innerHTML = `
+                <i data-lucide="upload-cloud" style="width:36px;height:36px;color:var(--gray-400);margin-bottom:0.75rem;"></i>
+                <p style="font-weight:600;color:var(--gray-700);margin-bottom:0.25rem;">Pilih File untuk Diimpor</p>
+                <p style="font-size:0.75rem;color:var(--gray-500);">Klik atau seret file .xlsx ke sini</p>
+            `;
+        }
+        if (btnSubmit) {
+            btnSubmit.style.opacity = '0.5';
+            btnSubmit.style.cursor = 'not-allowed';
+            btnSubmit.style.pointerEvents = 'none';
+        }
+    } else {
+        if (contentDiv) {
+            contentDiv.innerHTML = `
+                <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;font-weight:600;color:var(--gray-800);">
+                    <span>📄 ${file.name}</span>
+                    <button onclick="event.stopPropagation(); setImportFile(null);" style="background:transparent;border:none;color:var(--rose-500);font-size:1.2rem;cursor:pointer;font-weight:bold;padding:0 0.25rem;">×</button>
+                </div>
+            `;
+        }
+        if (btnSubmit) {
+            btnSubmit.style.opacity = '1';
+            btnSubmit.style.cursor = 'pointer';
+            btnSubmit.style.pointerEvents = 'auto';
+        }
+    }
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function downloadImportTemplate() {
+    let headers = [];
+    let rows = [];
+    let filename = "";
+
+    if (currentImportSection === 'produk') {
+        headers = ["SKU", "Nama Produk", "Kategori", "Harga Beli", "Harga Jual", "Stok", "Stok Minimum", "Satuan"];
+        rows = [
+            ["MNM-001", "Kopi Arabica 250g", "Minuman", 45000, 68000, 100, 20, "pcs"],
+            ["MKN-001", "Mie Instan (dus)", "Makanan", 92000, 115000, 50, 10, "dus"]
+        ];
+        filename = "sample_produk.xlsx";
+    } else if (currentImportSection === 'pelanggan') {
+        headers = ["Nama", "Tipe", "Telepon", "Kota", "Alamat", "Limit Piutang"];
+        rows = [
+            ["Toko Berkah Jaya", "Reseller", "089696469991", "Kota Denpasar", "Jl. Sunia Negara No. 33", 10000000],
+            ["Warung Sari Rasa", "Warung", "085936103383", "Denpasar", "Jl. Sunia Negara No. 33 Pemogan", 2000000]
+        ];
+        filename = "sample_pelanggan.xlsx";
+    } else if (currentImportSection === 'vendor') {
+        headers = ["Nama", "Kategori", "Telepon", "Kota", "Alamat", "No. Identitas", "Bank", "No. Rekening", "Pemilik Rekening"];
+        rows = [
+            ["PT Sumber Minuman Nusantara", "Minuman", "089696469991", "Kota Denpasar", "Jl. Sunia Negara No. 33", "3171011234567890", "BCA", "1234567890", "PT Sumber Minuman Nusantara"],
+            ["CV Pangan Makmur", "Sembako", "03177789012", "Gianyar", "Jl. Cokroaminoto Gg. Pucuk Sari 9", "3578022345678901", "Mandiri", "0987654321", "CV Pangan Makmur"]
+        ];
+        filename = "sample_vendor.xlsx";
+    } else if (currentImportSection === 'pembelian') {
+        headers = ["Tanggal", "Nama Vendor", "Total", "Terbayar", "Tipe Pembayaran", "Jatuh Tempo"];
+        rows = [
+            ["2026-06-12", "PT Sumber Minuman Nusantara", 225000, 225000, "Tunai", "2026-06-12"],
+            ["2026-06-12", "CV Pangan Makmur", 500000, 500000, "Tempo", "2026-06-30"]
+        ];
+        filename = "sample_pembelian.xlsx";
+    } else if (currentImportSection === 'invoice') {
+        headers = ["Tanggal", "Nama Customer", "Total", "Terbayar", "Tipe Pembayaran", "Jatuh Tempo"];
+        rows = [
+            ["2026-06-12", "Toko Berkah Jaya", 1154400, 1154400, "Tunai", "2026-06-12"],
+            ["2026-06-12", "Warung Sari Rasa", 406260, 406260, "Transfer", "2026-06-12"],
+            ["2026-06-12", "Pelanggan Umum", 75000, 0, "Tempo", "2026-07-12"]
+        ];
+        filename = "sample_invoice.xlsx";
+    }
+
+    const data = [headers, ...rows];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Template");
+    XLSX.writeFile(wb, filename);
+}
+
+function startImportProcess() {
+    if (!selectedImportFile) return;
+
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const wb = XLSX.read(data, {type: 'array'});
+            const sheet = wb.Sheets[wb.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(sheet);
+            await executeImport(rows);
+        } catch(err) {
+            showImportError("Gagal membaca file Excel: " + err.message);
+        }
+    };
+    reader.readAsArrayBuffer(selectedImportFile);
+}
+
+async function executeImport(rows) {
+    let successCount = 0;
+    let failedRows = [];
+
+    // Switch states
+    document.getElementById('import-state-initial').style.display = 'none';
+    document.getElementById('import-state-progress').style.display = 'block';
+    document.getElementById('import-state-result').style.display = 'none';
+    document.getElementById('import-modal-footer').style.display = 'none';
+
+    try {
+        let categoriesMap = {};
+        let unitsMap = {};
+        let paymentTypesMap = {};
+        let vendorsMap = {};
+        let customersMap = {};
+
+        // Fetch required master data once before looping
+        if (currentImportSection === 'produk') {
+            const [catsRes, unitsRes] = await Promise.all([
+                fetch('/api/master/product-categories', { headers: getAuthHeaders() }),
+                fetch('/api/master/product-units', { headers: getAuthHeaders() })
+            ]);
+            const cats = await catsRes.json();
+            const units = await unitsRes.json();
+            cats.forEach(c => categoriesMap[c.name.toLowerCase().trim()] = c.id);
+            units.forEach(u => unitsMap[u.name.toLowerCase().trim()] = u.id);
+        } else if (currentImportSection === 'pelanggan') {
+            const catsRes = await fetch('/api/master/customer-categories', { headers: getAuthHeaders() });
+            const cats = await catsRes.json();
+            cats.forEach(c => categoriesMap[c.name.toLowerCase().trim()] = c.id);
+        } else if (currentImportSection === 'vendor') {
+            const catsRes = await fetch('/api/master/vendor-categories', { headers: getAuthHeaders() });
+            const cats = await catsRes.json();
+            cats.forEach(c => categoriesMap[c.name.toLowerCase().trim()] = c.id);
+        } else if (currentImportSection === 'pembelian') {
+            const [ptRes, vendorsRes] = await Promise.all([
+                fetch('/api/master/payment-types', { headers: getAuthHeaders() }),
+                fetch('/api/vendors', { headers: getAuthHeaders() })
+            ]);
+            const pts = await ptRes.json();
+            const vends = await vendorsRes.json();
+            pts.forEach(p => paymentTypesMap[p.name.toLowerCase().trim()] = p.id);
+            vends.forEach(v => vendorsMap[v.name.toLowerCase().trim()] = v.id);
+        } else if (currentImportSection === 'invoice') {
+            const [ptRes, customersRes] = await Promise.all([
+                fetch('/api/master/payment-types', { headers: getAuthHeaders() }),
+                fetch('/api/customers', { headers: getAuthHeaders() })
+            ]);
+            const pts = await ptRes.json();
+            const custs = await customersRes.json();
+            pts.forEach(p => paymentTypesMap[p.name.toLowerCase().trim()] = p.id);
+            custs.forEach(c => customersMap[c.name.toLowerCase().trim()] = c.id);
+        }
+
+        const totalRows = rows.length;
+
+        for (let i = 0; i < totalRows; i++) {
+            document.getElementById('import-progress-text').innerText = `Mengimpor data... (${i + 1}/${totalRows} baris)`;
+            const row = rows[i];
+            const rowNum = i + 2;
+
+            try {
+                if (currentImportSection === 'produk') {
+                    const sku = row['SKU'] || '';
+                    const name = row['Nama Produk'] || '';
+                    const catName = row['Kategori'] || '';
+                    const cost = parseFloat(row['Harga Beli']) || 0;
+                    const price = parseFloat(row['Harga Jual']) || 0;
+                    const stock = parseFloat(row['Stok']) || 0;
+                    const minStock = parseFloat(row['Stok Minimum']) || 0;
+                    const unitName = row['Satuan'] || '';
+
+                    if (!name) throw new Error("Nama produk kosong");
+
+                    // Dynamic Category Creation
+                    let category_id = categoriesMap[catName.toLowerCase().trim()];
+                    if (!category_id && catName) {
+                        const addCatRes = await fetch('/api/master/product-categories', {
+                            method: 'POST',
+                            headers: getAuthHeaders(),
+                            body: JSON.stringify({ name: catName })
+                        });
+                        if (addCatRes.ok) {
+                            const newCat = await addCatRes.json();
+                            category_id = newCat.id;
+                            categoriesMap[catName.toLowerCase().trim()] = category_id;
+                        }
+                    }
+
+                    // Dynamic Unit Creation
+                    let unit_id = unitsMap[unitName.toLowerCase().trim()];
+                    if (!unit_id && unitName) {
+                        const addUnitRes = await fetch('/api/master/product-units', {
+                            method: 'POST',
+                            headers: getAuthHeaders(),
+                            body: JSON.stringify({ name: unitName })
+                        });
+                        if (addUnitRes.ok) {
+                            const newUnit = await addUnitRes.json();
+                            unit_id = newUnit.id;
+                            unitsMap[unitName.toLowerCase().trim()] = unit_id;
+                        }
+                    }
+
+                    const postRes = await fetch('/api/products', {
+                        method: 'POST',
+                        headers: getAuthHeaders(),
+                        body: JSON.stringify({
+                            sku, name, category_id, cost_price: cost, sell_price: price, stock, min_stock: minStock, unit_id
+                        })
+                    });
+                    if (!postRes.ok) {
+                        const err = await postRes.json();
+                        throw new Error(err.error || "Gagal menyimpan produk");
+                    }
+
+                } else if (currentImportSection === 'pelanggan') {
+                    const name = row['Nama'] || '';
+                    const catName = row['Tipe'] || '';
+                    const phone = row['Telepon'] || '';
+                    const city = row['Kota'] || '';
+                    const address = row['Alamat'] || '';
+                    const limit = parseFloat(row['Limit Piutang']) || 0;
+
+                    if (!name) throw new Error("Nama pelanggan kosong");
+
+                    // Dynamic Category Creation
+                    let customer_category_id = categoriesMap[catName.toLowerCase().trim()];
+                    if (!customer_category_id && catName) {
+                        const addCatRes = await fetch('/api/master/customer-categories', {
+                            method: 'POST',
+                            headers: getAuthHeaders(),
+                            body: JSON.stringify({ name: catName })
+                        });
+                        if (addCatRes.ok) {
+                            const newCat = await addCatRes.json();
+                            customer_category_id = newCat.id;
+                            categoriesMap[catName.toLowerCase().trim()] = customer_category_id;
+                        }
+                    }
+
+                    const postRes = await fetch('/api/customers', {
+                        method: 'POST',
+                        headers: getAuthHeaders(),
+                        body: JSON.stringify({
+                            name, customer_category_id, phone, city, address, credit_lmt: limit
+                        })
+                    });
+                    if (!postRes.ok) {
+                        const err = await postRes.json();
+                        throw new Error(err.error || "Gagal menyimpan pelanggan");
+                    }
+
+                } else if (currentImportSection === 'vendor') {
+                    const name = row['Nama'] || '';
+                    const catName = row['Kategori'] || '';
+                    const phone = row['Telepon'] || '';
+                    const city = row['Kota'] || '';
+                    const address = row['Alamat'] || '';
+                    const idNum = row['No. Identitas'] || '';
+                    const bank = row['Bank'] || '';
+                    const rekening = row['No. Rekening'] || '';
+                    const pemilik = row['Pemilik Rekening'] || '';
+
+                    if (!name) throw new Error("Nama vendor kosong");
+
+                    // Dynamic Category Creation
+                    let vendor_category_id = categoriesMap[catName.toLowerCase().trim()];
+                    if (!vendor_category_id && catName) {
+                        const addCatRes = await fetch('/api/master/vendor-categories', {
+                            method: 'POST',
+                            headers: getAuthHeaders(),
+                            body: JSON.stringify({ name: catName })
+                        });
+                        if (addCatRes.ok) {
+                            const newCat = await addCatRes.json();
+                            vendor_category_id = newCat.id;
+                            categoriesMap[catName.toLowerCase().trim()] = vendor_category_id;
+                        }
+                    }
+
+                    const postRes = await fetch('/api/vendors', {
+                        method: 'POST',
+                        headers: getAuthHeaders(),
+                        body: JSON.stringify({
+                            name, vendor_category_id, phone, city, address, id_number: idNum, nama_bank: bank, nomor_rek: rekening, pemilik_rek: pemilik
+                        })
+                    });
+                    if (!postRes.ok) {
+                        const err = await postRes.json();
+                        throw new Error(err.error || "Gagal menyimpan vendor");
+                    }
+
+                } else if (currentImportSection === 'pembelian') {
+                    const dateVal = row['Tanggal'] || '';
+                    const vendorName = row['Nama Vendor'] || '';
+                    const total = parseFloat(row['Total']) || 0;
+                    const paid = parseFloat(row['Terbayar']) || 0;
+                    const ptName = row['Tipe Pembayaran'] || '';
+                    const dueDateVal = row['Jatuh Tempo'] || '';
+
+                    if (!vendorName) throw new Error("Nama vendor kosong");
+
+                    const vendor_id = vendorsMap[vendorName.toLowerCase().trim()];
+                    if (!vendor_id) throw new Error(`Vendor "${vendorName}" tidak ditemukan`);
+
+                    const payment_type_id = paymentTypesMap[ptName.toLowerCase().trim()] || 'PT-1';
+
+                    const postRes = await fetch('/api/purchases', {
+                        method: 'POST',
+                        headers: getAuthHeaders(),
+                        body: JSON.stringify({
+                            vendor_id, date: dateVal, total, paid, payment_type_id, due_date: dueDateVal, items: []
+                        })
+                    });
+                    if (!postRes.ok) {
+                        const err = await postRes.json();
+                        throw new Error(err.error || "Gagal menyimpan pembelian");
+                    }
+
+                } else if (currentImportSection === 'invoice') {
+                    const dateVal = row['Tanggal'] || '';
+                    const customerName = row['Nama Customer'] || '';
+                    const total = parseFloat(row['Total']) || 0;
+                    const paid = parseFloat(row['Terbayar']) || 0;
+                    const ptName = row['Tipe Pembayaran'] || '';
+                    const dueDateVal = row['Jatuh Tempo'] || '';
+
+                    if (!customerName) throw new Error("Nama customer kosong");
+
+                    const customer_id = customersMap[customerName.toLowerCase().trim()];
+                    if (!customer_id) throw new Error(`Customer "${customerName}" tidak ditemukan`);
+
+                    const payment_type_id = paymentTypesMap[ptName.toLowerCase().trim()] || 'PT-1';
+
+                    const postRes = await fetch('/api/invoices', {
+                        method: 'POST',
+                        headers: getAuthHeaders(),
+                        body: JSON.stringify({
+                            customer_id, date: dateVal, total, paid, payment_type_id, due_date: dueDateVal, items: [], is_import: true
+                        })
+                    });
+                    if (!postRes.ok) {
+                        const err = await postRes.json();
+                        throw new Error(err.error || "Gagal menyimpan invoice");
+                    }
+                }
+
+                successCount++;
+            } catch (rowErr) {
+                console.error(`Error on row ${rowNum}:`, rowErr);
+                failedRows.push(`Baris ${rowNum}: ${rowErr.message}`);
+            }
+        }
+
+        // Show Result State
+        document.getElementById('import-state-progress').style.display = 'none';
+        document.getElementById('import-state-result').style.display = 'block';
+
+        document.getElementById('import-result-success').innerText = `Berhasil: ${successCount} baris`;
+        document.getElementById('import-result-failed').innerText = `Gagal: ${failedRows.length} baris`;
+
+        const errList = document.getElementById('import-error-list');
+        if (errList) {
+            errList.innerHTML = failedRows.map(f => `<div style="margin-bottom:0.25rem;">${f}</div>`).join('');
+        }
+
+        // Show Tutup button
+        const footer = document.getElementById('import-modal-footer');
+        footer.style.display = 'flex';
+        footer.innerHTML = `
+            <button class="btn-toolbar primary" onclick="closeImportAndRefresh()">Tutup</button>
+        `;
+
+    } catch (globalErr) {
+        console.error('Global import error:', globalErr);
+        const footer = document.getElementById('import-modal-footer');
+        footer.style.display = 'flex';
+        footer.innerHTML = `
+            <button class="btn-toolbar secondary" id="import-btn-cancel" onclick="closeImportModal()">Batal</button>
+            <button class="btn-toolbar primary" id="import-btn-submit" onclick="startImportProcess()">Proses Import</button>
+        `;
+        showImportError("Gagal memproses import data: " + globalErr.message);
+    }
+}
+
+function showImportError(msg) {
+    document.getElementById('import-state-progress').style.display = 'none';
+    document.getElementById('import-state-result').style.display = 'block';
+    document.getElementById('import-result-success').innerText = '';
+    document.getElementById('import-result-failed').innerText = 'Kesalahan Fatal';
+    const errList = document.getElementById('import-error-list');
+    if (errList) errList.innerText = msg;
+}
+
+function closeImportAndRefresh() {
+    closeImportModal();
+    // Refresh table data
+    if (currentImportSection === 'produk') {
+        fetchProducts();
+    } else if (currentImportSection === 'pelanggan') {
+        fetchCustomers();
+    } else if (currentImportSection === 'vendor') {
+        fetchVendors();
+    } else if (currentImportSection === 'pembelian') {
+        fetchPurchases();
+    } else if (currentImportSection === 'invoice') {
+        fetchInvoices();
+    }
+}
+
+function exportSection(section) {
+    let headers = [];
+    let rows = [];
+    let filename = "";
+
+    if (section === 'produk') {
+        headers = ["SKU", "Nama Produk", "Kategori", "Harga Beli", "Harga Jual", "Stok", "Stok Minimum", "Satuan"];
+        rows = PRODUCTS.map(p => [
+            p.sku || '',
+            p.name || '',
+            p.category || '',
+            p.cost || 0,
+            p.price || 0,
+            p.stock || 0,
+            p.minStock || 0,
+            p.unit || ''
+        ]);
+        filename = "export_produk.xlsx";
+    } else if (section === 'pelanggan') {
+        headers = ["Nama", "Tipe", "Telepon", "Kota", "Alamat", "Limit Piutang"];
+        rows = CUSTOMERS.map(c => [
+            c.name || '',
+            c.type || '',
+            c.phone || '',
+            c.city || '',
+            c.address || '',
+            c.creditLimit || 0
+        ]);
+        filename = "export_pelanggan.xlsx";
+    } else if (section === 'vendor') {
+        headers = ["Nama", "Kategori", "Telepon", "Kota", "Alamat", "No. Identitas", "Bank", "No. Rekening", "Pemilik Rekening"];
+        rows = VENDORS.map(v => [
+            v.name || '',
+            v.category || '',
+            v.phone || '',
+            v.city || '',
+            v.address || '',
+            v.idNumber || '',
+            v.bank || '',
+            v.rekening || '',
+            v.pemilik || ''
+        ]);
+        filename = "export_vendor.xlsx";
+    } else if (section === 'pembelian') {
+        headers = ["Tanggal", "Nama Vendor", "Total", "Terbayar", "Tipe Pembayaran", "Jatuh Tempo"];
+        rows = PURCHASES.map(p => [
+            p.date || '',
+            p.vendor || '',
+            p.total || 0,
+            p.paid || 0,
+            p.type || '',
+            p.dueDate || ''
+        ]);
+        filename = "export_pembelian.xlsx";
+    } else if (section === 'invoice') {
+        headers = ["Tanggal", "Nama Customer", "Total", "Terbayar", "Tipe Pembayaran", "Jatuh Tempo"];
+        rows = INVOICES.map(i => [
+            i.date || '',
+            i.customer || '',
+            i.total || 0,
+            i.paid || 0,
+            i.type || '',
+            i.dueDate || ''
+        ]);
+        filename = "export_invoice.xlsx";
+    }
+
+    const data = [headers, ...rows];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+    XLSX.writeFile(wb, filename);
+}
+
+// Bind to window for global accessibility
+window.openImportModal = openImportModal;
+window.closeImportModal = closeImportModal;
+window.handleImportDrop = handleImportDrop;
+window.handleImportFileSelect = handleImportFileSelect;
+window.setImportFile = setImportFile;
+window.downloadImportTemplate = downloadImportTemplate;
+window.startImportProcess = startImportProcess;
+window.closeImportAndRefresh = closeImportAndRefresh;
+window.exportSection = exportSection;
+

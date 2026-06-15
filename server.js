@@ -3,10 +3,11 @@ const cors = require('cors');
 const { Pool } = require('pg');
 const path = require('path');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
 
 const app = express();
 const port = 3000;
-const SECRET_KEY = 'supplierpro_secret_key_demo'; // In a real app, use environment variables
+const SECRET_KEY = process.env.JWT_SECRET || 'supplierpro_secret_key_demo';
 
 // Middleware
 app.use(cors());
@@ -37,6 +38,73 @@ pool.query(`
     ON CONFLICT (key) DO NOTHING;
   `);
 }).catch(err => console.error('Error initializing settings table on startup:', err));
+
+// Fix: Reset users_id_seq to max(id) so new inserts don't collide with seeded rows
+pool.query(`
+  SELECT setval('users_id_seq', COALESCE((SELECT MAX(id) FROM users), 1));
+`).then(() => {
+  console.log('[Startup] users_id_seq reset to MAX(id)');
+}).catch(err => console.error('[Startup] Failed to reset users_id_seq:', err));
+
+// Seed/upgrade cash_categories to the canonical defaults
+(async () => {
+  try {
+    // Ensure UNIQUE constraint on cash_categories.name exists (migration-safe)
+    await pool.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'cash_categories_name_key' AND conrelid = 'cash_categories'::regclass
+        ) THEN
+          ALTER TABLE cash_categories ADD CONSTRAINT cash_categories_name_key UNIQUE (name);
+        END IF;
+      END $$;
+    `);
+  } catch (err) {
+    console.error('[Startup] Could not add unique constraint to cash_categories.name:', err);
+  }
+
+  const defaults = [
+    { name: 'Penjualan',              type: 'IN',   is_system: true  },
+    { name: 'Pelunasan Piutang',      type: 'IN',   is_system: true  },
+    { name: 'Pembelian Stok',         type: 'OUT',  is_system: true  },
+    { name: 'Penyesuaian Stok',       type: 'OUT',  is_system: true  },
+    { name: 'Pelunasan Hutang',       type: 'OUT',  is_system: true  },
+    { name: 'Gaji & Tunjangan',       type: 'OUT',  is_system: false },
+    { name: 'Sewa',                   type: 'OUT',  is_system: false },
+    { name: 'Operasional',            type: 'OUT',  is_system: false },
+    { name: 'Marketing',              type: 'OUT',  is_system: false },
+    { name: 'Pajak',                  type: 'OUT',  is_system: false },
+    { name: 'Pembelian Aset',         type: 'OUT',  is_system: false },
+    { name: 'Prive Pemilik',          type: 'OUT',  is_system: false },
+    { name: 'Pengeluaran Lainnya',    type: 'OUT',  is_system: false },
+    { name: 'Pendapatan Lainnya',     type: 'IN',   is_system: false },
+    { name: 'Pinjaman Masuk',         type: 'IN',   is_system: false },
+    { name: 'Setoran Modal',          type: 'IN',   is_system: false },
+    { name: 'Transfer Antar Kas/Bank',type: 'BOTH', is_system: false },
+  ];
+  try {
+    for (const item of defaults) {
+      await pool.query(
+        `INSERT INTO cash_categories (name, type, is_system)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (name) DO UPDATE SET type = EXCLUDED.type, is_system = EXCLUDED.is_system`,
+        [item.name, item.type, item.is_system]
+      );
+    }
+    // Remove stale legacy categories (no longer in default list and not user-created ones that are in use)
+    await pool.query(`
+      DELETE FROM cash_categories
+      WHERE name IN ('Gaji','Lainnya') AND is_system = false
+        AND id NOT IN (SELECT DISTINCT id FROM cash_categories WHERE name NOT IN (
+          SELECT DISTINCT category FROM cash_transactions WHERE category IS NOT NULL
+        ))
+    `).catch(() => {}); // non-fatal
+    console.log('[Startup] cash_categories seeded/upgraded successfully.');
+  } catch (err) {
+    console.error('[Startup] Failed to seed cash_categories:', err.message);
+  }
+})();
 
 // Settings & Prefix Helpers
 async function getSetting(key, defaultValue) {
@@ -103,15 +171,36 @@ const authenticateToken = (req, res, next) => {
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
   try {
-    const result = await pool.query('SELECT * FROM users WHERE username = $1 AND password_hash = $2 AND active = true', [username, password]);
+    const result = await pool.query('SELECT * FROM users WHERE username = $1 AND active = true', [username]);
     const user = result.rows[0];
 
-    if (user) {
-      const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, SECRET_KEY, { expiresIn: '24h' });
-      res.json({ token, role: user.role, username: user.username });
-    } else {
-      res.status(401).json({ error: 'Username atau password salah' });
+    if (!user) {
+      return res.status(401).json({ error: 'Username atau password salah' });
     }
+
+    const isBcryptHash = user.password_hash.startsWith('$2b$') || user.password_hash.startsWith('$2a$');
+    let isMatch = false;
+
+    if (isBcryptHash) {
+      isMatch = await bcrypt.compare(password, user.password_hash);
+    } else {
+      if (password === user.password_hash) {
+        isMatch = true;
+        try {
+          const newHash = await bcrypt.hash(password, 10);
+          await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, user.id]);
+        } catch (hashErr) {
+          console.error('Error auto-migrating user password to bcrypt:', hashErr);
+        }
+      }
+    }
+
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Username atau password salah' });
+    }
+
+    const token = jwt.sign({ id: user.id, username: user.username, role: user.role, name: user.name }, SECRET_KEY, { expiresIn: '24h' });
+    res.json({ token, role: user.role, username: user.username, name: user.name });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -163,6 +252,24 @@ app.get('/api/master/payment-types', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/master/cash-categories', authenticateToken, async (req, res) => {
+  try {
+    const { type } = req.query;
+    let query = 'SELECT * FROM cash_categories';
+    const params = [];
+    if (type) {
+      query += ' WHERE type = $1 OR type = \'BOTH\' ORDER BY id ASC';
+      params.push(type);
+    } else {
+      query += ' ORDER BY id ASC';
+    }
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/cash-categories', authenticateToken, async (req, res) => {
   const { type } = req.query;
   try {
@@ -187,17 +294,30 @@ const MASTER_TABLE_WHITELIST = {
   product_units: 'product_units',
   customer_categories: 'customer_categories',
   vendor_categories: 'vendor_categories',
-  payment_types: 'payment_types'
+  payment_types: 'payment_types',
+  cash_categories: 'cash_categories'   // serial PK — handled specially below
 };
 
 app.post('/api/master/:type', authenticateToken, async (req, res) => {
   const tableName = MASTER_TABLE_WHITELIST[req.params.type];
   if (!tableName) return res.status(400).json({ error: 'Tipe master data tidak valid' });
-  const { id, name } = req.body;
+  const { id, name, type, is_system } = req.body;
   if (!name) return res.status(400).json({ error: 'Nama wajib diisi' });
   try {
-    await pool.query(`INSERT INTO ${tableName} (id, name) VALUES ($1, $2)`, [id || req.params.type.toUpperCase().slice(0, 2) + '-' + Date.now(), name]);
-    res.json({ success: true });
+    let result;
+    if (tableName === 'cash_categories') {
+      // SERIAL primary key — let DB auto-assign; include type and is_system
+      result = await pool.query(
+        `INSERT INTO cash_categories (name, type, is_system) VALUES ($1, $2, $3) RETURNING id`,
+        [name, type || 'BOTH', is_system || false]
+      );
+    } else {
+      result = await pool.query(
+        `INSERT INTO ${tableName} (id, name) VALUES ($1, $2) RETURNING id`,
+        [id || req.params.type.toUpperCase().slice(0, 2) + '-' + Date.now(), name]
+      );
+    }
+    res.json({ success: true, id: result.rows[0]?.id });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -206,10 +326,18 @@ app.post('/api/master/:type', authenticateToken, async (req, res) => {
 app.put('/api/master/:type/:id', authenticateToken, async (req, res) => {
   const tableName = MASTER_TABLE_WHITELIST[req.params.type];
   if (!tableName) return res.status(400).json({ error: 'Tipe master data tidak valid' });
-  const { name } = req.body;
+  const { name, type, is_system } = req.body;
   if (!name) return res.status(400).json({ error: 'Nama wajib diisi' });
   try {
-    const result = await pool.query(`UPDATE ${tableName} SET name = $1 WHERE id = $2`, [name, req.params.id]);
+    let result;
+    if (tableName === 'cash_categories') {
+      result = await pool.query(
+        `UPDATE cash_categories SET name=$1, type=$2, is_system=$3 WHERE id=$4`,
+        [name, type || 'BOTH', is_system ?? false, parseInt(req.params.id)]
+      );
+    } else {
+      result = await pool.query(`UPDATE ${tableName} SET name=$1 WHERE id=$2`, [name, req.params.id]);
+    }
     if (result.rowCount === 0) return res.status(404).json({ error: 'Data tidak ditemukan' });
     res.json({ success: true });
   } catch (err) {
@@ -221,7 +349,13 @@ app.delete('/api/master/:type/:id', authenticateToken, async (req, res) => {
   const tableName = MASTER_TABLE_WHITELIST[req.params.type];
   if (!tableName) return res.status(400).json({ error: 'Tipe master data tidak valid' });
   try {
-    const result = await pool.query(`DELETE FROM ${tableName} WHERE id = $1`, [req.params.id]);
+    // Prevent deleting system categories
+    if (tableName === 'cash_categories') {
+      const check = await pool.query('SELECT is_system FROM cash_categories WHERE id=$1', [parseInt(req.params.id)]);
+      if (check.rows[0]?.is_system) return res.status(403).json({ error: 'Kategori sistem tidak dapat dihapus.' });
+    }
+    const idVal = tableName === 'cash_categories' ? parseInt(req.params.id) : req.params.id;
+    const result = await pool.query(`DELETE FROM ${tableName} WHERE id=$1`, [idVal]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'Data tidak ditemukan' });
     res.json({ success: true });
   } catch (err) {
@@ -720,14 +854,16 @@ app.post('/api/invoices', authenticateToken, async (req, res) => {
   // Server-side input validation — never let an empty string reach the FK constraint
   if (!customer_id) return res.status(400).json({ error: 'customer_id wajib diisi' });
   if (!payment_type_id) return res.status(400).json({ error: 'payment_type_id wajib diisi. Pilih metode pembayaran yang valid.' });
-  if (!items || !Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'Invoice harus memiliki minimal satu item produk.' });
+  if ((!items || !Array.isArray(items) || items.length === 0) && !req.body.is_import) {
+    return res.status(400).json({ error: 'Invoice harus memiliki minimal satu item produk.' });
+  }
 
   console.log(`[Invoice Creation API] Selected Payment Type ID: "${payment_type_id}"`);
 
   const insertInvoiceQuery = 'INSERT INTO sales_invoices (id, date, customer_id, total, paid_amount, payment_type_id, due_date, status, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)';
   const updateStockQuery = 'UPDATE products SET stock = stock - $1 WHERE id = $2';
 
-  const date = new Date().toISOString();
+  const date = req.body.date ? new Date(req.body.date).toISOString() : new Date().toISOString();
   const status = paid >= total ? 'Lunas' : (paid > 0 ? 'Sebagian' : 'Belum Bayar');
 
   const client = await pool.connect();
@@ -879,7 +1015,7 @@ app.post('/api/finance/cash-flow', authenticateToken, async (req, res) => {
     await pool.query(
       `INSERT INTO cash_transactions (id, date, type, category, description, amount, method, status, user_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8)`,
-      [ctId, ctDate, type, category || 'Lainnya', description || '-', parseFloat(amount), method || 'Transfer Bank', userId]
+      [ctId, ctDate, type, category || (type === 'IN' ? 'Pendapatan Lainnya' : 'Pengeluaran Lainnya'), description || '-', parseFloat(amount), method || 'Transfer Bank', userId]
     );
     res.json({ success: true, id: ctId });
   } catch (err) {
@@ -1036,18 +1172,20 @@ app.get('/api/laporan/laba-rugi', authenticateToken, async (req, res) => {
 
     console.log(`[Laba Rugi] HPP=${hpp} LabaKotor=${labaKotor}`);
 
-    // 3. BEBAN OPERASIONAL
-    // cash_transactions.date is DATE type so no cast needed
+    // 3. BEBAN OPERASIONAL (all OUT transactions not linked to system categories like Pembelian Stok/Penyesuaian Stok)
+    // Uses is_system=false from cash_categories to be database-driven — no hardcoded category names
     const resBeban = await client.query(`
-      SELECT category, COALESCE(SUM(amount), 0) AS total
-      FROM cash_transactions
-      WHERE type = 'OUT'
-        AND (status IS NULL OR status != 'cancelled')
-        AND invoice_id IS NULL
-        AND purchase_order_id IS NULL
-        AND category NOT IN ('Pembelian Stok', 'Penyesuaian Stok')
-        AND date BETWEEN $1 AND $2
-      GROUP BY category
+      SELECT ct.category, COALESCE(SUM(ct.amount), 0) AS total
+      FROM cash_transactions ct
+      WHERE ct.type = 'OUT'
+        AND (ct.status IS NULL OR ct.status != 'cancelled')
+        AND ct.invoice_id IS NULL
+        AND ct.purchase_order_id IS NULL
+        AND ct.date BETWEEN $1 AND $2
+        AND ct.category NOT IN (
+          SELECT name FROM cash_categories WHERE is_system = true AND (type = 'OUT' OR type = 'BOTH')
+        )
+      GROUP BY ct.category
     `, [start_date, end_date]);
 
     const rincianBeban = resBeban.rows.map(r => ({
@@ -1059,7 +1197,7 @@ app.get('/api/laporan/laba-rugi', authenticateToken, async (req, res) => {
 
     console.log(`[Laba Rugi] BebanOperasional=${totalBebanOperasional} LabaOperasional=${labaOperasional}`);
 
-    // 4. PENYESUAIAN STOK
+    // 4. PENYESUAIAN STOK (stock-opname adjustments — still tracked by category name)
     const resStok = await client.query(`
       SELECT type, COALESCE(SUM(amount), 0) AS total
       FROM cash_transactions
@@ -1077,14 +1215,17 @@ app.get('/api/laporan/laba-rugi', authenticateToken, async (req, res) => {
     });
     const netPenyesuaianStok = penyesuaianStokMasuk - penyesuaianStokKeluar;
 
-    // 5. PENDAPATAN LAIN-LAIN
+    // 5. PENDAPATAN LAIN-LAIN (all IN transactions not linked to system IN categories)
+    // Database-driven: system IN categories (Penjualan, Pelunasan Piutang, Penyesuaian Stok) are excluded
     const resLain = await client.query(`
-      SELECT COALESCE(SUM(amount), 0) AS total
-      FROM cash_transactions
-      WHERE type = 'IN'
-        AND (status IS NULL OR status != 'cancelled')
-        AND category NOT IN ('Penjualan', 'Penyesuaian Stok', 'Pelunasan Piutang')
-        AND date BETWEEN $1 AND $2
+      SELECT COALESCE(SUM(ct.amount), 0) AS total
+      FROM cash_transactions ct
+      WHERE ct.type = 'IN'
+        AND (ct.status IS NULL OR ct.status != 'cancelled')
+        AND ct.date BETWEEN $1 AND $2
+        AND ct.category NOT IN (
+          SELECT name FROM cash_categories WHERE is_system = true AND (type = 'IN' OR type = 'BOTH')
+        )
     `, [start_date, end_date]);
     const pendapatanLain = parseFloat(resLain.rows[0]?.total || 0);
 
@@ -1908,9 +2049,14 @@ app.get('/api/users', authenticateToken, async (req, res) => {
 app.post('/api/users', authenticateToken, async (req, res) => {
   const { username, name, email, password, role, active } = req.body;
   try {
+    const targetPassword = password || '123456';
+    if (targetPassword.length < 6) {
+      return res.status(400).json({ error: 'Password minimal 6 karakter' });
+    }
+    const hashedPassword = await bcrypt.hash(targetPassword, 10);
     await pool.query(
       'INSERT INTO users (username, name, email, password_hash, role, active) VALUES ($1, $2, $3, $4, $5, $6)',
-      [username, name, email, password || '123456', role || 'kasir', active !== undefined ? active : true]
+      [username, name, email, hashedPassword, role || 'kasir', active !== undefined ? active : true]
     );
     res.json({ success: true });
   } catch (err) {
@@ -1970,6 +2116,25 @@ app.get('/login', (req, res) => {
     }
   } catch (err) {
     console.error('[Seed] Failed to seed Pelanggan Umum:', err.message);
+  }
+})();
+
+// One-time setup function that runs on server start to seed superadmin
+(async () => {
+  try {
+    const bcrypt = require('bcrypt');
+    const newAdminPassword = 'Admin@2026';
+    const hashedPassword = await bcrypt.hash(newAdminPassword, 10);
+    
+    await pool.query(`
+      INSERT INTO users (username, name, email, password_hash, role, active)
+      VALUES ('superadmin', 'Super Administrator', 
+              'superadmin@supplierpro.id', $1, 'admin', true)
+      ON CONFLICT (username) DO NOTHING
+    `, [hashedPassword]);
+    console.log('[Seed] Superadmin user verification completed');
+  } catch (err) {
+    console.error('[Seed] Failed to seed superadmin user:', err.message);
   }
 })();
 
