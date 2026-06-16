@@ -165,6 +165,21 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// Role Authorization Middleware
+const authorizeRoles = (...allowedRoles) => {
+  return (req, res, next) => {
+    if (!req.user || !req.user.role) {
+      return res.status(403).json({ error: 'Akses ditolak: Peran tidak teridentifikasi' });
+    }
+    const userRole = req.user.role.toLowerCase();
+    const hasRole = allowedRoles.some(role => role.toLowerCase() === userRole);
+    if (!hasRole) {
+      return res.status(403).json({ error: `Akses ditolak: Peran '${req.user.role}' tidak memiliki hak akses` });
+    }
+    next();
+  };
+};
+
 // ======================= API ROUTES =======================
 
 // --- Auth Routes ---
@@ -298,7 +313,7 @@ const MASTER_TABLE_WHITELIST = {
   cash_categories: 'cash_categories'   // serial PK — handled specially below
 };
 
-app.post('/api/master/:type', authenticateToken, async (req, res) => {
+app.post('/api/master/:type', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   const tableName = MASTER_TABLE_WHITELIST[req.params.type];
   if (!tableName) return res.status(400).json({ error: 'Tipe master data tidak valid' });
   const { id, name, type, is_system } = req.body;
@@ -323,7 +338,7 @@ app.post('/api/master/:type', authenticateToken, async (req, res) => {
   }
 });
 
-app.put('/api/master/:type/:id', authenticateToken, async (req, res) => {
+app.put('/api/master/:type/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   const tableName = MASTER_TABLE_WHITELIST[req.params.type];
   if (!tableName) return res.status(400).json({ error: 'Tipe master data tidak valid' });
   const { name, type, is_system } = req.body;
@@ -345,7 +360,7 @@ app.put('/api/master/:type/:id', authenticateToken, async (req, res) => {
   }
 });
 
-app.delete('/api/master/:type/:id', authenticateToken, async (req, res) => {
+app.delete('/api/master/:type/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   const tableName = MASTER_TABLE_WHITELIST[req.params.type];
   if (!tableName) return res.status(400).json({ error: 'Tipe master data tidak valid' });
   try {
@@ -368,7 +383,7 @@ app.delete('/api/master/:type/:id', authenticateToken, async (req, res) => {
 });
 
 // --- Settings Routes ---
-app.get('/api/settings', authenticateToken, async (req, res) => {
+app.get('/api/settings', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM settings');
     const settingsMap = {};
@@ -381,7 +396,7 @@ app.get('/api/settings', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/settings', authenticateToken, async (req, res) => {
+app.post('/api/settings', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   const settings = req.body;
   const client = await pool.connect();
   try {
@@ -576,7 +591,7 @@ app.get('/api/products', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/products', authenticateToken, async (req, res) => {
+app.post('/api/products', authenticateToken, authorizeRoles('admin', 'gudang'), async (req, res) => {
   const { id, sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id } = req.body;
   const insertQuery = 'INSERT INTO products (id, sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)';
   try {
@@ -589,7 +604,7 @@ app.post('/api/products', authenticateToken, async (req, res) => {
   }
 });
 
-app.put('/api/products/:id', authenticateToken, async (req, res) => {
+app.put('/api/products/:id', authenticateToken, authorizeRoles('admin', 'gudang'), async (req, res) => {
   const { id } = req.params;
   const { sku, name, category_id, cost_price, sell_price, stock, min_stock, unit_id } = req.body;
   const updateQuery = 'UPDATE products SET sku = $1, name = $2, category_id = $3, cost_price = $4, sell_price = $5, stock = $6, min_stock = $7, unit_id = $8 WHERE id = $9';
@@ -604,7 +619,7 @@ app.put('/api/products/:id', authenticateToken, async (req, res) => {
   }
 });
 
-app.delete('/api/products/:id', authenticateToken, async (req, res) => {
+app.delete('/api/products/:id', authenticateToken, authorizeRoles('admin', 'gudang'), async (req, res) => {
   const { id } = req.params;
   const deleteQuery = 'DELETE FROM products WHERE id = $1';
   try {
@@ -619,7 +634,7 @@ app.delete('/api/products/:id', authenticateToken, async (req, res) => {
 });
 
 // --- Stock Adjust (Stock Opname) ---
-app.post('/api/stock-adjust', authenticateToken, async (req, res) => {
+app.post('/api/stock-adjust', authenticateToken, authorizeRoles('admin', 'gudang'), async (req, res) => {
   const { product_id, actual_stock, note } = req.body;
   if (!product_id || actual_stock === undefined || actual_stock === null) {
     return res.status(400).json({ error: 'product_id dan actual_stock wajib diisi' });
@@ -682,7 +697,7 @@ const CUSTOMER_SELECT_SQL = `
   LEFT JOIN sales_invoices si ON si.customer_id = c.id
 `;
 
-app.get('/api/customers', authenticateToken, async (req, res) => {
+app.get('/api/customers', authenticateToken, authorizeRoles('admin', 'kasir', 'finance'), async (req, res) => {
   try {
     const result = await pool.query(CUSTOMER_SELECT_SQL + ' GROUP BY c.id, cc.name ORDER BY c.name ASC');
     res.json(result.rows);
@@ -691,7 +706,7 @@ app.get('/api/customers', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/customers/search', authenticateToken, async (req, res) => {
+app.get('/api/customers/search', authenticateToken, authorizeRoles('admin', 'kasir', 'finance'), async (req, res) => {
   const { q } = req.query;
   const pattern = `%${q || ''}%`;
   try {
@@ -709,7 +724,7 @@ app.get('/api/customers/search', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/customers/:id', authenticateToken, async (req, res) => {
+app.get('/api/customers/:id', authenticateToken, authorizeRoles('admin', 'kasir', 'finance'), async (req, res) => {
   const { id } = req.params;
   try {
     const result = await pool.query(
@@ -723,7 +738,7 @@ app.get('/api/customers/:id', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/customers', authenticateToken, async (req, res) => {
+app.post('/api/customers', authenticateToken, authorizeRoles('admin', 'kasir'), async (req, res) => {
   const { name, customer_category_id, phone, city, address, credit_lmt } = req.body;
   const insertQuery = 'INSERT INTO customers (id, name, customer_category_id, phone, city, address, credit_lmt) VALUES ($1, $2, $3, $4, $5, $6, $7)';
   try {
@@ -736,7 +751,7 @@ app.post('/api/customers', authenticateToken, async (req, res) => {
   }
 });
 
-app.put('/api/customers/:id', authenticateToken, async (req, res) => {
+app.put('/api/customers/:id', authenticateToken, authorizeRoles('admin', 'kasir'), async (req, res) => {
   const { id } = req.params;
   const { name, customer_category_id, phone, city, address, credit_lmt } = req.body;
   const updateQuery = 'UPDATE customers SET name = $1, customer_category_id = $2, phone = $3, city = $4, address = $5, credit_lmt = $6 WHERE id = $7';
@@ -751,7 +766,7 @@ app.put('/api/customers/:id', authenticateToken, async (req, res) => {
   }
 });
 
-app.delete('/api/customers/:id', authenticateToken, async (req, res) => {
+app.delete('/api/customers/:id', authenticateToken, authorizeRoles('admin', 'kasir'), async (req, res) => {
   const { id } = req.params;
   const deleteQuery = 'DELETE FROM customers WHERE id = $1';
   try {
@@ -766,7 +781,7 @@ app.delete('/api/customers/:id', authenticateToken, async (req, res) => {
 });
 
 // --- Vendors Routes ---
-app.get('/api/vendors', authenticateToken, async (req, res) => {
+app.get('/api/vendors', authenticateToken, authorizeRoles('admin', 'gudang', 'finance'), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT v.*, vc.name as category_name,
@@ -791,7 +806,7 @@ app.get('/api/vendors', authenticateToken, async (req, res) => {
 });
 
 // --- Invoices Routes (Sales) ---
-app.get('/api/invoices', authenticateToken, async (req, res) => {
+app.get('/api/invoices', authenticateToken, authorizeRoles('admin', 'kasir', 'finance'), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT si.*, c.name as customer, pt.name as payment_type_name
@@ -818,7 +833,7 @@ app.get('/api/invoices', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/invoices/:id/items', authenticateToken, async (req, res) => {
+app.get('/api/invoices/:id/items', authenticateToken, authorizeRoles('admin', 'kasir', 'finance'), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT ii.*, p.name as product_name, p.sell_price
@@ -832,7 +847,7 @@ app.get('/api/invoices/:id/items', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/purchases/:id/items', authenticateToken, async (req, res) => {
+app.get('/api/purchases/:id/items', authenticateToken, authorizeRoles('admin', 'gudang', 'finance'), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT poi.*, p.name as product_name, p.cost_price
@@ -846,7 +861,7 @@ app.get('/api/purchases/:id/items', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/invoices', authenticateToken, async (req, res) => {
+app.post('/api/invoices', authenticateToken, authorizeRoles('admin', 'kasir'), async (req, res) => {
   console.log(`[Invoice Creation API] Request received:`, JSON.stringify(req.body, null, 2));
   const { customer_id, total, paid, payment_type_id, due_date, items } = req.body;
   const userId = req.user.id;
@@ -910,7 +925,7 @@ app.post('/api/invoices', authenticateToken, async (req, res) => {
 
 // --- Finance Routes ---
 
-app.post('/api/invoices/manual', authenticateToken, async (req, res) => {
+app.post('/api/invoices/manual', authenticateToken, authorizeRoles('admin', 'kasir', 'finance'), async (req, res) => {
   const { id, date, due_date, customer_id, total, payment_type_id, payment_method } = req.body;
   const userId = req.user.id;
 
@@ -928,7 +943,7 @@ app.post('/api/invoices/manual', authenticateToken, async (req, res) => {
     res.status(400).json({ error: err.message });
   }
 });
-app.get('/api/finance/receivables', authenticateToken, async (req, res) => {
+app.get('/api/finance/receivables', authenticateToken, authorizeRoles('admin', 'finance', 'kasir'), async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM sales_invoices WHERE status != $1 AND status != $2', ['Lunas', 'Batal']);
     res.json(result.rows);
@@ -937,7 +952,7 @@ app.get('/api/finance/receivables', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/finance/receivables/:id/pay', authenticateToken, async (req, res) => {
+app.post('/api/finance/receivables/:id/pay', authenticateToken, authorizeRoles('admin', 'finance', 'kasir'), async (req, res) => {
   const { id } = req.params;
   const { amount } = req.body;
 
@@ -981,7 +996,7 @@ app.post('/api/finance/receivables/:id/pay', authenticateToken, async (req, res)
 pool.query(`ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active'`)
   .catch(err => console.error('Error adding status column to cash_transactions:', err));
 
-app.get('/api/finance/cash-flow', authenticateToken, async (req, res) => {
+app.get('/api/finance/cash-flow', authenticateToken, authorizeRoles('admin', 'finance'), async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM cash_transactions ORDER BY date DESC, id DESC');
     res.json(result.rows.map(r => ({
@@ -1002,7 +1017,7 @@ app.get('/api/finance/cash-flow', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/finance/cash-flow', authenticateToken, async (req, res) => {
+app.post('/api/finance/cash-flow', authenticateToken, authorizeRoles('admin', 'finance'), async (req, res) => {
   const { type, category, description, amount, method, date } = req.body;
   const userId = req.user.id;
   if (!type || !amount || parseFloat(amount) <= 0) {
@@ -1024,7 +1039,7 @@ app.post('/api/finance/cash-flow', authenticateToken, async (req, res) => {
 });
 
 // PUT - Edit transaksi kas manual (hanya yang tidak punya invoice_id / purchase_order_id)
-app.put('/api/finance/cash-flow/:id', authenticateToken, async (req, res) => {
+app.put('/api/finance/cash-flow/:id', authenticateToken, authorizeRoles('admin', 'finance'), async (req, res) => {
   const { id } = req.params;
   const { type, category, description, amount, method, date } = req.body;
   try {
@@ -1046,7 +1061,7 @@ app.put('/api/finance/cash-flow/:id', authenticateToken, async (req, res) => {
 });
 
 // PATCH - Batalkan transaksi kas (soft delete + reversal untuk auto transactions)
-app.patch('/api/finance/cash-flow/:id/cancel', authenticateToken, async (req, res) => {
+app.patch('/api/finance/cash-flow/:id/cancel', authenticateToken, authorizeRoles('admin', 'finance'), async (req, res) => {
   const { id } = req.params;
   const client = await pool.connect();
   try {
@@ -1120,7 +1135,7 @@ app.patch('/api/finance/cash-flow/:id/cancel', authenticateToken, async (req, re
 });
 
 // --- Laba Rugi Endpoint ---
-app.get('/api/laporan/laba-rugi', authenticateToken, async (req, res) => {
+app.get('/api/laporan/laba-rugi', authenticateToken, authorizeRoles('admin', 'finance'), async (req, res) => {
   const bulan = parseInt(req.query.bulan, 10);
   const tahun = parseInt(req.query.tahun, 10);
 
@@ -1268,7 +1283,7 @@ app.get('/api/laporan/laba-rugi', authenticateToken, async (req, res) => {
   }
 });
 // --- Laporan Neraca ---
-app.get('/api/laporan/neraca', authenticateToken, async (req, res) => {
+app.get('/api/laporan/neraca', authenticateToken, authorizeRoles('admin', 'finance'), async (req, res) => {
   const bulan = parseInt(req.query.bulan, 10);
   const tahun = parseInt(req.query.tahun, 10);
 
@@ -1380,7 +1395,7 @@ app.get('/api/laporan/neraca', authenticateToken, async (req, res) => {
 });
 
 // --- Laporan Analisis Performa ---
-app.get('/api/laporan/performa', authenticateToken, async (req, res) => {
+app.get('/api/laporan/performa', authenticateToken, authorizeRoles('admin', 'finance'), async (req, res) => {
   const bulan = parseInt(req.query.bulan, 10);
   const tahun = parseInt(req.query.tahun, 10);
 
@@ -1507,7 +1522,7 @@ app.get('/api/laporan/performa', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/finance/payables', authenticateToken, async (req, res) => {
+app.get('/api/finance/payables', authenticateToken, authorizeRoles('admin', 'finance'), async (req, res) => {
   try {
     const result = await pool.query('SELECT po.*, v.name as vendor_name, pt.name as payment_type_name FROM purchase_orders po LEFT JOIN vendors v ON po.vendor_id = v.id LEFT JOIN payment_types pt ON po.payment_type_id = pt.id WHERE po.status != $1 AND po.status != $2', ['Selesai', 'Batal']);
     res.json(result.rows);
@@ -1517,7 +1532,7 @@ app.get('/api/finance/payables', authenticateToken, async (req, res) => {
 });
 
 // Pay vendor PO debt
-app.post('/api/finance/payables/:id/pay', authenticateToken, async (req, res) => {
+app.post('/api/finance/payables/:id/pay', authenticateToken, authorizeRoles('admin', 'finance'), async (req, res) => {
   const { id } = req.params;
   const { amount } = req.body;
   const payAmount = parseFloat(amount || 0);
@@ -1564,7 +1579,7 @@ app.post('/api/finance/payables/:id/pay', authenticateToken, async (req, res) =>
 });
 
 // --- Vendors Routes Extra CRUD ---
-app.post('/api/vendors', authenticateToken, async (req, res) => {
+app.post('/api/vendors', authenticateToken, authorizeRoles('admin', 'gudang'), async (req, res) => {
   const { name, vendor_category_id, category_id, phone, city, address, id_number, nama_bank, nomor_rek, pemilik_rek } = req.body;
   const catId = vendor_category_id || category_id || 'VC-1';
   try {
@@ -1580,7 +1595,7 @@ app.post('/api/vendors', authenticateToken, async (req, res) => {
   }
 });
 
-app.put('/api/vendors/:id', authenticateToken, async (req, res) => {
+app.put('/api/vendors/:id', authenticateToken, authorizeRoles('admin', 'gudang'), async (req, res) => {
   const { id } = req.params;
   const { name, vendor_category_id, category_id, phone, city, address, id_number, nama_bank, nomor_rek, pemilik_rek } = req.body;
   const catId = vendor_category_id || category_id;
@@ -1596,7 +1611,7 @@ app.put('/api/vendors/:id', authenticateToken, async (req, res) => {
   }
 });
 
-app.delete('/api/vendors/:id', authenticateToken, async (req, res) => {
+app.delete('/api/vendors/:id', authenticateToken, authorizeRoles('admin', 'gudang'), async (req, res) => {
   const { id } = req.params;
   try {
     const result = await pool.query('DELETE FROM vendors WHERE id = $1', [id]);
@@ -1608,7 +1623,7 @@ app.delete('/api/vendors/:id', authenticateToken, async (req, res) => {
 });
 
 // --- Purchase Orders Routes ---
-app.get('/api/purchases', authenticateToken, async (req, res) => {
+app.get('/api/purchases', authenticateToken, authorizeRoles('admin', 'gudang', 'finance'), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT po.*, v.name as vendor_name, pt.name as payment_type 
@@ -1634,7 +1649,7 @@ app.get('/api/purchases', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/purchases', authenticateToken, async (req, res) => {
+app.post('/api/purchases', authenticateToken, authorizeRoles('admin', 'gudang'), async (req, res) => {
   const { vendor_id, vendorId, date, total, paid, paid_amount, payment_type_id, due_date, items } = req.body;
   const vId = vendor_id || vendorId;
   const pType = payment_type_id || 'PT-1';
@@ -1681,7 +1696,7 @@ app.post('/api/purchases', authenticateToken, async (req, res) => {
   }
 });
 
-app.put('/api/purchases/:id', authenticateToken, async (req, res) => {
+app.put('/api/purchases/:id', authenticateToken, authorizeRoles('admin', 'gudang'), async (req, res) => {
   const poId = req.params.id;
   const { vendor_id, vendorId, date, total, paid, paid_amount, payment_type_id, due_date, items } = req.body;
   const vId = vendor_id || vendorId;
@@ -1739,7 +1754,7 @@ app.put('/api/purchases/:id', authenticateToken, async (req, res) => {
   }
 });
 
-app.put('/api/purchases/:id/cancel', authenticateToken, async (req, res) => {
+app.put('/api/purchases/:id/cancel', authenticateToken, authorizeRoles('admin', 'gudang'), async (req, res) => {
   const poId = req.params.id;
   const client = await pool.connect();
   try {
@@ -1774,7 +1789,7 @@ app.put('/api/purchases/:id/cancel', authenticateToken, async (req, res) => {
 });
 
 // --- Sales Invoices Extra CRUD ---
-app.put('/api/invoices/:id', authenticateToken, async (req, res) => {
+app.put('/api/invoices/:id', authenticateToken, authorizeRoles('admin', 'kasir'), async (req, res) => {
   const invId = req.params.id;
   const { customer_id, customerId, date, total, paid, paid_amount, payment_type_id, due_date, items } = req.body;
   const custId = customer_id || customerId;
@@ -1834,7 +1849,7 @@ app.put('/api/invoices/:id', authenticateToken, async (req, res) => {
   }
 });
 
-app.put('/api/invoices/:id/cancel', authenticateToken, async (req, res) => {
+app.put('/api/invoices/:id/cancel', authenticateToken, authorizeRoles('admin', 'kasir'), async (req, res) => {
   const invId = req.params.id;
   const client = await pool.connect();
   try {
@@ -1869,7 +1884,7 @@ app.put('/api/invoices/:id/cancel', authenticateToken, async (req, res) => {
 });
 
 // --- Cash Transactions (Arus Kas) ---
-app.get('/api/finance/cashflow', authenticateToken, async (req, res) => {
+app.get('/api/finance/cashflow', authenticateToken, authorizeRoles('admin', 'finance'), async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM cash_transactions ORDER BY date DESC, id DESC');
     res.json(result.rows.map(r => ({
@@ -1886,7 +1901,7 @@ app.get('/api/finance/cashflow', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/finance/cashflow', authenticateToken, async (req, res) => {
+app.post('/api/finance/cashflow', authenticateToken, authorizeRoles('admin', 'finance'), async (req, res) => {
   const { type, category, description, amount, method, date } = req.body;
   const ctDate = date || new Date().toISOString().split('T')[0];
   try {
@@ -1903,7 +1918,7 @@ app.post('/api/finance/cashflow', authenticateToken, async (req, res) => {
 });
 
 // --- Reports & Dashboard API ---
-app.get('/api/finance/reports/profit-loss', authenticateToken, async (req, res) => {
+app.get('/api/finance/reports/profit-loss', authenticateToken, authorizeRoles('admin', 'finance'), async (req, res) => {
   try {
     const salesRes = await pool.query("SELECT SUM(total) as revenue FROM sales_invoices WHERE status != 'Batal'");
     const revenue = parseFloat(salesRes.rows[0].revenue || 0);
@@ -1937,7 +1952,7 @@ app.get('/api/finance/reports/profit-loss', authenticateToken, async (req, res) 
   }
 });
 
-app.get('/api/finance/reports/balance-sheet', authenticateToken, async (req, res) => {
+app.get('/api/finance/reports/balance-sheet', authenticateToken, authorizeRoles('admin', 'finance'), async (req, res) => {
   try {
     const cashInRes = await pool.query("SELECT SUM(amount) as total FROM cash_transactions WHERE type = 'IN'");
     const cashOutRes = await pool.query("SELECT SUM(amount) as total FROM cash_transactions WHERE type = 'OUT'");
@@ -1963,7 +1978,7 @@ app.get('/api/finance/reports/balance-sheet', authenticateToken, async (req, res
   }
 });
 
-app.get('/api/reports/insights', authenticateToken, async (req, res) => {
+app.get('/api/reports/insights', authenticateToken, authorizeRoles('admin', 'finance'), async (req, res) => {
   try {
     const topProductsRes = await pool.query(`
       SELECT p.name, SUM(ii.quantity * ii.price) as value
@@ -1996,7 +2011,7 @@ app.get('/api/reports/insights', authenticateToken, async (req, res) => {
 });
 
 // --- Product Stock Opname ---
-app.post('/api/products/:id/stock-adjustment', authenticateToken, async (req, res) => {
+app.post('/api/products/:id/stock-adjustment', authenticateToken, authorizeRoles('admin', 'gudang'), async (req, res) => {
   const prodId = req.params.id;
   const { actual_stock, reason } = req.body;
   const finalActual = parseFloat(actual_stock);
@@ -2037,7 +2052,7 @@ app.post('/api/products/:id/stock-adjustment', authenticateToken, async (req, re
 });
 
 // --- Users / Staff CRUD ---
-app.get('/api/users', authenticateToken, async (req, res) => {
+app.get('/api/users', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   try {
     const result = await pool.query('SELECT id, username, name, email, role, active FROM users ORDER BY id ASC');
     res.json(result.rows);
@@ -2046,7 +2061,7 @@ app.get('/api/users', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/users', authenticateToken, async (req, res) => {
+app.post('/api/users', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   const { username, name, email, password, role, active } = req.body;
   try {
     const targetPassword = password || '123456';
@@ -2064,7 +2079,7 @@ app.post('/api/users', authenticateToken, async (req, res) => {
   }
 });
 
-app.put('/api/users/:id', authenticateToken, async (req, res) => {
+app.put('/api/users/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   const { id } = req.params;
   const { name, email, role, active } = req.body;
   try {
@@ -2078,7 +2093,7 @@ app.put('/api/users/:id', authenticateToken, async (req, res) => {
   }
 });
 
-app.delete('/api/users/:id', authenticateToken, async (req, res) => {
+app.delete('/api/users/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   const { id } = req.params;
   try {
     await pool.query('UPDATE users SET active = false WHERE id = $1', [id]);
@@ -2093,31 +2108,7 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'login.html'));
 });
 
-// Auto-seed: ensure "Pelanggan Umum" walk-in customer always exists
-(async () => {
-  try {
-    const existing = await pool.query(`SELECT id FROM customers WHERE name = 'Pelanggan Umum' LIMIT 1`);
-    if (existing.rows.length === 0) {
-      // Find next customer ID
-      const lastId = await pool.query(`SELECT id FROM customers ORDER BY id DESC LIMIT 1`);
-      let nextNum = 1;
-      if (lastId.rows.length > 0) {
-        const match = lastId.rows[0].id.match(/(\d+)$/);
-        if (match) nextNum = parseInt(match[1], 10) + 1;
-      }
-      const newId = 'C' + String(nextNum).padStart(6, '0');
-      await pool.query(
-        `INSERT INTO customers (id, name, phone, city, address) VALUES ($1, $2, $3, $4, $5)`,
-        [newId, 'Pelanggan Umum', '-', '-', '-']
-      );
-      console.log(`[Seed] Pelanggan Umum created with id: ${newId}`);
-    } else {
-      console.log(`[Seed] Pelanggan Umum already exists: ${existing.rows[0].id}`);
-    }
-  } catch (err) {
-    console.error('[Seed] Failed to seed Pelanggan Umum:', err.message);
-  }
-})();
+
 
 // One-time setup function that runs on server start to seed superadmin
 (async () => {

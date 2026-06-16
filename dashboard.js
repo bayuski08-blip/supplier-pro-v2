@@ -114,10 +114,58 @@ const PAGE_TITLES = {
     'master-data': { title: 'Master Data', subtitle: 'Kelola kategori, satuan, dan tipe pembayaran' },
 };
 
+// ---------- Role Based Access Control (RBAC) ----------
+const ROLE_PERMISSIONS = {
+    admin: ['dashboard', 'pos', 'products', 'customers', 'vendors', 'purchases', 'invoices', 'piutang', 'hutang', 'cashflow', 'profitloss', 'balance', 'reports', 'settings', 'roles', 'master-data'],
+    finance: ['dashboard', 'piutang', 'hutang', 'cashflow', 'profitloss', 'balance', 'reports'],
+    gudang: ['dashboard', 'products', 'purchases', 'vendors'],
+    kasir: ['dashboard', 'pos', 'customers', 'invoices', 'piutang']
+};
+
+function applyRoleRestrictions() {
+    const rawRole = localStorage.getItem('role') || 'kasir';
+    const role = rawRole.toLowerCase();
+    const allowedPages = ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.kasir;
+
+    // Show/hide nav-items based on allowedPages
+    document.querySelectorAll('.nav-item').forEach(item => {
+        const page = item.dataset.page;
+        if (allowedPages.includes(page)) {
+            item.style.display = '';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+
+    // Also hide nav groups if all their items are hidden
+    document.querySelectorAll('.nav-group').forEach(group => {
+        const visibleItems = Array.from(group.querySelectorAll('.nav-item')).filter(item => item.style.display !== 'none');
+        if (visibleItems.length === 0) {
+            group.style.display = 'none';
+        } else {
+            group.style.display = '';
+        }
+    });
+
+    // If current page is not allowed, navigate to the first allowed page
+    if (!allowedPages.includes(currentPage)) {
+        const firstAllowed = allowedPages[0] || 'dashboard';
+        navigateTo(firstAllowed);
+    }
+}
+
 // ---------- Navigation ----------
 let currentPage = 'dashboard';
 
 function navigateTo(page) {
+    const rawRole = localStorage.getItem('role') || 'kasir';
+    const role = rawRole.toLowerCase();
+    const allowedPages = ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.kasir;
+    if (!allowedPages.includes(page)) {
+        showToast('Akses ditolak: Anda tidak memiliki wewenang untuk halaman ini.', 'error');
+        return;
+    }
+
     // Hide all sections
     document.querySelectorAll('.page-section').forEach(s => s.classList.remove('active'));
     // Deactivate all nav items
@@ -1702,23 +1750,7 @@ function populateCustomerSelect(filter = '') {
     });
 }
 
-/**
- * Quick-select "Pelanggan Umum" walk-in customer for POS checkout.
- * Searches CUSTOMERS array for a record whose name includes 'umum',
- * then fills both the visible search input and the hidden ID field.
- */
-function selectUmumCustomer() {
-    const umum = CUSTOMERS.find(c => c.name && c.name.toLowerCase().includes('umum'));
-    if (!umum) {
-        showToast('Pelanggan Umum belum terdaftar. Silakan tambahkan di menu Pelanggan.', 'warning');
-        return;
-    }
-    document.getElementById('pos-customer-search').value = umum.name;
-    document.getElementById('pos-customer-id').value = umum.id;
-    const dropdown = document.getElementById('pos-customer-dropdown');
-    if (dropdown) dropdown.style.display = 'none';
-    console.log(`[POS] Pelanggan Umum selected: ${umum.name} (${umum.id})`);
-}
+
 
 // POS Customer Search bindings
 document.addEventListener('DOMContentLoaded', () => {
@@ -1853,6 +1885,9 @@ async function init() {
             : (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
         sidebarAvatarEl.textContent = initials;
     }
+
+    // Apply RBAC UI restrictions
+    applyRoleRestrictions();
 
     // Logout handler
     const logoutBtn = document.getElementById('logout-btn');
@@ -4028,8 +4063,7 @@ function downloadImportTemplate() {
         headers = ["Tanggal", "Nama Customer", "Total", "Terbayar", "Tipe Pembayaran", "Jatuh Tempo"];
         rows = [
             ["2026-06-12", "Toko Berkah Jaya", 1154400, 1154400, "Tunai", "2026-06-12"],
-            ["2026-06-12", "Warung Sari Rasa", 406260, 406260, "Transfer", "2026-06-12"],
-            ["2026-06-12", "Pelanggan Umum", 75000, 0, "Tempo", "2026-07-12"]
+            ["2026-06-12", "Warung Sari Rasa", 406260, 406260, "Transfer", "2026-06-12"]
         ];
         filename = "sample_invoice.xlsx";
     }

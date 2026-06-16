@@ -63,11 +63,15 @@ ON CONFLICT (id) DO NOTHING;
 SELECT setval('cash_categories_id_seq', (SELECT COALESCE(MAX(id), 1) FROM cash_categories));
 
 -- Users
+-- Note: password_hash values below are plain text (auto-upgraded to bcrypt on first login)
+-- Passwords: admin=admin123, demo_finance=Finance123, demo_gudang=Gudang123, demo_kasir=Kasir123
 INSERT INTO users (id, username, name, email, password_hash, role, active) VALUES 
   (1, 'admin', 'Administrator', 'admin@supplierpro.id', 'admin123', 'admin', true),
-  (2, 'bayu', 'bayu', 'bayu@gmail.com', 'bayu', 'admin', true)
+  (2, 'bayu', 'bayu', 'bayu@gmail.com', 'bayu', 'admin', true),
+  (3, 'demo_finance', 'Demo Finance', 'finance@supplierpro.id', 'Finance123', 'finance', true),
+  (4, 'demo_gudang', 'Demo Gudang', 'gudang@supplierpro.id', 'Gudang123', 'gudang', true),
+  (5, 'demo_kasir', 'Demo Kasir', 'kasir@supplierpro.id', 'Kasir123', 'kasir', true)
 ON CONFLICT (id) DO NOTHING;
-ON CONFLICT (username) DO NOTHING;
 SELECT setval('users_id_seq', (SELECT COALESCE(MAX(id), 1) FROM users));
 
 -- Products
@@ -79,8 +83,7 @@ ON CONFLICT (id) DO NOTHING;
 -- Customers
 INSERT INTO customers (id, name, customer_category_id, phone, city, address, credit_lmt) VALUES 
   ('C000001', 'Toko Berkah Jaya', 'CC-1', '089696469991', 'Kota Denpasar', 'Jl. Sunia Negara No. 33', 10000000),
-  ('C000002', 'Warung Sari Rasa', 'CC-2', '085936103383', 'denpasar', 'Jl. Sunia Negara No. 33, Pemogan', 2000000),
-  ('C000003', 'Pelanggan Umum', 'CC-4', '', 'Denpasar', '', 0)
+  ('C000002', 'Warung Sari Rasa', 'CC-2', '085936103383', 'denpasar', 'Jl. Sunia Negara No. 33, Pemogan', 2000000)
 ON CONFLICT (id) DO NOTHING;
 
 -- Vendors
@@ -101,12 +104,12 @@ INSERT INTO sales_invoices (id, date, customer_id, subtotal, discount, tax, tota
   ('INV-2026-06-000008', '2026-06-12T06:56:49.632Z', 'C000001', 0, 0, 0, 150000, 150000, '', 'PT-4', NULL, 'Lunas', 1),
   ('INV-2026-06-000009', '2026-06-12T06:56:55.414Z', 'C000001', 0, 0, 0, 150000, 150000, '', 'PT-4', NULL, 'Lunas', 1),
   ('INV-2026-06-000010', '2026-06-12T08:09:01.374Z', 'C000001', 0, 0, 0, 115000, 115000, '2026-06-30', 'PT-1', NULL, 'Lunas', 1),
-  ('INV-2026-06-000011', '2026-06-12T08:15:00.413Z', 'C000003', 0, 0, 0, 27750, 27750, '2026-06-30', 'PT-1', NULL, 'Lunas', 1),
-  ('INV-2026-06-000012', '2026-06-12T08:19:05.792Z', 'C000003', 0, 0, 0, 50000, 50000, '', 'PT-4', NULL, 'Lunas', 1),
-  ('INV-2026-06-000013', '2026-06-12T08:19:06.130Z', 'C000003', 0, 0, 0, 75000, 0, '2026-07-12', 'PT-2', NULL, 'Belum Bayar', 1),
-  ('INV-2026-06-000014', '2026-06-12T08:24:46.805Z', 'C000003', 0, 0, 0, 50000, 50000, '', 'PT-1', NULL, 'Lunas', 1),
-  ('INV-2026-06-000015', '2026-06-12T08:24:46.933Z', 'C000003', 0, 0, 0, 50000, 50000, '', 'PT-4', NULL, 'Lunas', 1),
-  ('INV-2026-06-000016', '2026-06-12T08:24:46.954Z', 'C000003', 0, 0, 0, 50000, 0, '2026-07-30', 'PT-2', NULL, 'Belum Bayar', 1)
+  ('INV-2026-06-000011', '2026-06-12T08:15:00.413Z', 'C000001', 0, 0, 0, 27750, 27750, '2026-06-30', 'PT-1', NULL, 'Lunas', 1),
+  ('INV-2026-06-000012', '2026-06-12T08:19:05.792Z', 'C000001', 0, 0, 0, 50000, 50000, '', 'PT-4', NULL, 'Lunas', 1),
+  ('INV-2026-06-000013', '2026-06-12T08:19:06.130Z', 'C000001', 0, 0, 0, 75000, 0, '2026-07-12', 'PT-2', NULL, 'Belum Bayar', 1),
+  ('INV-2026-06-000014', '2026-06-12T08:24:46.805Z', 'C000001', 0, 0, 0, 50000, 50000, '', 'PT-1', NULL, 'Lunas', 1),
+  ('INV-2026-06-000015', '2026-06-12T08:24:46.933Z', 'C000001', 0, 0, 0, 50000, 50000, '', 'PT-4', NULL, 'Lunas', 1),
+  ('INV-2026-06-000016', '2026-06-12T08:24:46.954Z', 'C000001', 0, 0, 0, 50000, 0, '2026-07-30', 'PT-2', NULL, 'Belum Bayar', 1)
 ON CONFLICT (id) DO NOTHING;
 
 -- Invoice Items
