@@ -34,7 +34,12 @@ pool.query(`
     ('prefix_cash_transaction', 'CT'),
     ('prefix_purchase', 'PO/{YYYY}/{MM}/'),
     ('prefix_sales', 'INV/{YYYY}/{MM}/'),
-    ('modal_pemilik', '0')
+    ('modal_pemilik', '0'),
+    ('company_name', ''),
+    ('company_phone', ''),
+    ('company_email', ''),
+    ('company_address', ''),
+    ('company_logo', '')
     ON CONFLICT (key) DO NOTHING;
   `);
 }).catch(err => console.error('Error initializing settings table on startup:', err));
@@ -842,6 +847,64 @@ app.get('/api/invoices/:id/items', authenticateToken, authorizeRoles('admin', 'k
       WHERE ii.invoice_id = $1
     `, [req.params.id]);
     res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/invoices/:id/print-data', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const invRes = await pool.query(`
+      SELECT si.*, c.name as customer_name, pt.name as payment_type_name
+      FROM sales_invoices si
+      LEFT JOIN customers c ON si.customer_id = c.id
+      LEFT JOIN payment_types pt ON si.payment_type_id = pt.id
+      WHERE si.id = $1
+    `, [id]);
+    
+    if (invRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Invoice tidak ditemukan' });
+    }
+    
+    const invoiceRow = invRes.rows[0];
+    
+    const itemsRes = await pool.query(`
+      SELECT ii.*, p.name as product_name, pu.name as unit_name
+      FROM invoice_items ii
+      LEFT JOIN products p ON ii.product_id = p.id
+      LEFT JOIN product_units pu ON p.unit_id = pu.id
+      WHERE ii.invoice_id = $1
+    `, [id]);
+    
+    const settingsRes = await pool.query(`SELECT key, value FROM settings WHERE key IN ('company_name', 'company_phone', 'company_email', 'company_address', 'company_logo')`);
+    const company = {};
+    settingsRes.rows.forEach(r => {
+      company[r.key.replace('company_', '')] = r.value;
+    });
+    
+    res.json({
+      invoice: {
+        id: invoiceRow.id,
+        date: invoiceRow.date ? String(invoiceRow.date).split('T')[0] : '',
+        due_date: invoiceRow.due_date ? String(invoiceRow.due_date).split('T')[0] : '',
+        total: parseFloat(invoiceRow.total),
+        tax: parseFloat(invoiceRow.tax || 0),
+        payment_type_name: invoiceRow.payment_type_name || 'Tunai'
+      },
+      customer: {
+        name: invoiceRow.customer_name || 'Pelanggan Umum'
+      },
+      items: itemsRes.rows.map(item => ({
+        product_name: item.product_name,
+        unit_name: item.unit_name || '-',
+        quantity: parseFloat(item.quantity),
+        price: parseFloat(item.price),
+        total: parseFloat(item.quantity) * parseFloat(item.price)
+      })),
+      company: company
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

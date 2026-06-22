@@ -921,24 +921,32 @@
                             <div class="settings-card-body">
                                 <div class="form-group">
                                     <label>Nama Bisnis</label>
-                                    <input type="text" class="form-input" value="CV Maju Bersama">
+                                    <input type="text" id="settings-company-name" class="form-input" value="">
                                 </div>
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label>Telepon</label>
-                                        <input type="text" class="form-input" value="0812-3456-7890">
+                                        <input type="text" id="settings-company-phone" class="form-input" value="">
                                     </div>
                                     <div class="form-group">
                                         <label>Email</label>
-                                        <input type="email" class="form-input" value="info@majubersama.co.id">
+                                        <input type="email" id="settings-company-email" class="form-input" value="">
                                     </div>
                                 </div>
                                 <div class="form-group">
                                     <label>Alamat</label>
-                                    <textarea
-                                        class="form-input">Jl. Raya Industri No. 45, Surabaya, Jawa Timur 60175</textarea>
+                                    <textarea id="settings-company-address"
+                                        class="form-input"></textarea>
                                 </div>
-                                <button class="btn-toolbar primary">
+                                <div class="form-group">
+                                    <label>Logo Perusahaan</label>
+                                    <input type="file" id="settings-company-logo-file" class="form-input" accept="image/*" onchange="previewCompanyLogo(this)">
+                                    <div style="margin-top: 10px;">
+                                        <img id="settings-company-logo-preview" src="" style="max-height: 80px; display: none; border: 1px solid var(--gray-300); border-radius: 4px; padding: 4px;">
+                                        <input type="hidden" id="settings-company-logo-base64">
+                                    </div>
+                                </div>
+                                <button class="btn-toolbar primary" id="btn-save-company-profile" onclick="saveCompanyProfile(event)">
                                     <i data-lucide="save"></i> Simpan
                                 </button>
                             </div>
@@ -2610,6 +2618,103 @@
                 <button class="btn-toolbar secondary" onclick="closeModal('modal-manual-invoice')">Batal</button>
                 <button class="btn-toolbar primary" onclick="saveManualInvoice()"><i data-lucide="save"></i> Simpan
                     Invoice</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Printable Invoice Page (Hidden by default, shown via JS) -->
+    <div id="print-invoice-view" style="display: none; background: white; width: 100%; min-height: 100vh; position: fixed; top: 0; left: 0; z-index: 99999; padding: 2rem; box-sizing: border-box; overflow-y: auto;">
+        <div style="max-width: 800px; margin: 0 auto; background: white;">
+            <!-- Actions (Not printed) -->
+            <div class="no-print" style="display: flex; justify-content: flex-end; gap: 1rem; margin-bottom: 2rem;">
+                <button class="btn-toolbar secondary" onclick="closePrintInvoiceView()">Tutup</button>
+                <button class="btn-toolbar primary" onclick="window.print()"><i data-lucide="printer"></i> Cetak / Print</button>
+            </div>
+
+            <!-- Invoice Header -->
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; border-bottom: 2px solid #000; padding-bottom: 1rem;">
+                <div>
+                    <img id="print-company-logo" src="" style="max-height: 80px; margin-bottom: 1rem; display: none;">
+                    <h2 id="print-company-name" style="margin: 0; font-size: 1.5rem; color: #000;"></h2>
+                </div>
+                <div style="text-align: right; max-width: 300px; color: #000;">
+                    <div id="print-company-address" style="margin-bottom: 0.5rem; font-size: 0.875rem;"></div>
+                    <div style="font-size: 0.875rem;">Email : <span id="print-company-email"></span></div>
+                    <div style="font-size: 0.875rem;">Tlp : <span id="print-company-phone"></span></div>
+                </div>
+            </div>
+
+            <!-- Invoice Title & Customer Info -->
+            <h1 style="text-align: center; margin-bottom: 2rem; font-size: 1.75rem; text-transform: uppercase; color: #000;">INVOICE</h1>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 2rem; color: #000;">
+                <div>
+                    <table style="font-size: 0.875rem; border: none;">
+                        <tr><td style="padding-right: 1rem; font-weight: bold; padding-bottom: 0.25rem;">Nama Customer</td><td>: <span id="print-customer-name"></span></td></tr>
+                    </table>
+                </div>
+                <div>
+                    <table style="font-size: 0.875rem; border: none;">
+                        <tr><td style="padding-right: 1rem; font-weight: bold; padding-bottom: 0.25rem;">Tanggal</td><td>: <span id="print-invoice-date"></span></td></tr>
+                        <tr><td style="padding-right: 1rem; font-weight: bold; padding-bottom: 0.25rem;">No. Invoice</td><td>: <span id="print-invoice-id"></span></td></tr>
+                        <tr id="print-row-due-date"><td style="padding-right: 1rem; font-weight: bold; padding-bottom: 0.25rem;">Jatuh Tempo</td><td>: <span id="print-invoice-due-date"></span></td></tr>
+                        <tr><td style="padding-right: 1rem; font-weight: bold; padding-bottom: 0.25rem;">Payment</td><td>: <span id="print-invoice-payment-type"></span></td></tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Items Table -->
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 2rem; font-size: 0.875rem; color: #000;">
+                <thead>
+                    <tr>
+                        <th style="border: 1px solid #000; padding: 0.5rem; text-align: center; width: 50px;">No.</th>
+                        <th style="border: 1px solid #000; padding: 0.5rem; text-align: left;">Produk</th>
+                        <th style="border: 1px solid #000; padding: 0.5rem; text-align: center;">Satuan</th>
+                        <th style="border: 1px solid #000; padding: 0.5rem; text-align: center;">Qty</th>
+                        <th style="border: 1px solid #000; padding: 0.5rem; text-align: right;">Harga</th>
+                        <th style="border: 1px solid #000; padding: 0.5rem; text-align: right;">Total</th>
+                    </tr>
+                </thead>
+                <tbody id="print-invoice-items">
+                    <!-- JS fills this -->
+                </tbody>
+            </table>
+
+            <!-- Footer area -->
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; color: #000;">
+                <!-- Signatures -->
+                <div style="display: flex; gap: 3rem; margin-top: 2rem; font-size: 0.875rem;">
+                    <div style="text-align: center;">
+                        <div style="margin-bottom: 4rem;">Regards,</div>
+                        <div>(__________________)</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="margin-bottom: 4rem;">Driver,</div>
+                        <div>(__________________)</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="margin-bottom: 4rem;">Customer,</div>
+                        <div>(__________________)</div>
+                    </div>
+                </div>
+
+                <!-- Totals -->
+                <div style="width: 250px; font-size: 0.875rem;">
+                    <table style="width: 100%; border-collapse: collapse; border: none;">
+                        <tr>
+                            <td style="padding: 0.25rem 0; font-weight: bold;">SUB TOTAL</td>
+                            <td style="text-align: right;" id="print-invoice-subtotal"></td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 0.25rem 0; font-weight: bold;">TAX</td>
+                            <td style="text-align: right;" id="print-invoice-tax"></td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 0.5rem 0; font-weight: bold; font-size: 1rem; border-top: 2px solid #000; margin-top: 0.5rem;">GRAND TOTAL</td>
+                            <td style="text-align: right; font-weight: bold; font-size: 1rem; border-top: 2px solid #000; margin-top: 0.5rem;" id="print-invoice-grand-total"></td>
+                        </tr>
+                    </table>
+                </div>
             </div>
         </div>
     </div>

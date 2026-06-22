@@ -185,6 +185,10 @@ function navigateTo(page) {
 
     currentPage = page;
 
+    if (page === 'settings') {
+        loadCompanyProfile();
+    }
+
     // Close mobile sidebar
     document.getElementById('sidebar').classList.remove('open');
     document.getElementById('sidebar-overlay').classList.remove('active');
@@ -902,7 +906,7 @@ function renderInvoices(filter = '') {
             <td>${inv.type}</td>
             <td><span class="badge-status ${statusClass}">${capitalize(inv.status || 'Belum Bayar')}</span></td>
             <td style="text-align: right; white-space: nowrap;">
-                <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;" title="Print Preview" onclick="openModal('modal-print-invoice')">
+                <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;" title="Print Preview" onclick="printInvoice('${inv.id}')">
                     <i data-lucide="printer" style="width: 14px; height: 14px; margin: 0;"></i>
                 </button>
                 <button class="btn-toolbar secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-right: 0.25rem;" title="Edit Invoice" onclick="openEditInvoiceModal('${inv.id}')">
@@ -4489,4 +4493,147 @@ window.downloadImportTemplate = downloadImportTemplate;
 window.startImportProcess = startImportProcess;
 window.closeImportAndRefresh = closeImportAndRefresh;
 window.exportSection = exportSection;
+
+// ---------- Company Settings & Print Invoice ----------
+function previewCompanyLogo(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('settings-company-logo-preview').src = e.target.result;
+            document.getElementById('settings-company-logo-preview').style.display = 'block';
+            document.getElementById('settings-company-logo-base64').value = e.target.result;
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+async function loadCompanyProfile() {
+    try {
+        const res = await fetch('/api/settings', { headers: getAuthHeaders() });
+        if (!res.ok) throw new Error('Failed to load settings');
+        const data = await res.json();
+        
+        if (data.company_name) document.getElementById('settings-company-name').value = data.company_name;
+        if (data.company_phone) document.getElementById('settings-company-phone').value = data.company_phone;
+        if (data.company_email) document.getElementById('settings-company-email').value = data.company_email;
+        if (data.company_address) document.getElementById('settings-company-address').value = data.company_address;
+        
+        if (data.company_logo) {
+            document.getElementById('settings-company-logo-preview').src = data.company_logo;
+            document.getElementById('settings-company-logo-preview').style.display = 'block';
+            document.getElementById('settings-company-logo-base64').value = data.company_logo;
+        } else {
+            document.getElementById('settings-company-logo-preview').style.display = 'none';
+            document.getElementById('settings-company-logo-base64').value = '';
+        }
+    } catch (err) {
+        console.error(err);
+        showToast('Gagal memuat profil bisnis', 'error');
+    }
+}
+
+async function saveCompanyProfile(e) {
+    if (e) e.preventDefault();
+    const payload = {
+        company_name: document.getElementById('settings-company-name').value,
+        company_phone: document.getElementById('settings-company-phone').value,
+        company_email: document.getElementById('settings-company-email').value,
+        company_address: document.getElementById('settings-company-address').value,
+        company_logo: document.getElementById('settings-company-logo-base64').value
+    };
+    
+    try {
+        const res = await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('Failed to save settings');
+        showToast('Profil bisnis berhasil disimpan', 'success');
+    } catch (err) {
+        console.error(err);
+        showToast('Gagal menyimpan profil bisnis', 'error');
+    }
+}
+
+async function printInvoice(id) {
+    try {
+        showToast('Menyiapkan invoice untuk dicetak...', 'info');
+        const res = await fetch(`/api/invoices/${id}/print-data`, { headers: getAuthHeaders() });
+        if (!res.ok) throw new Error('Failed to load print data');
+        const data = await res.json();
+        
+        // Populate Company
+        const comp = data.company;
+        document.getElementById('print-company-name').textContent = comp.name || 'Nama Bisnis';
+        document.getElementById('print-company-address').textContent = comp.address || '-';
+        document.getElementById('print-company-email').textContent = comp.email || '-';
+        document.getElementById('print-company-phone').textContent = comp.phone || '-';
+        
+        if (comp.logo) {
+            document.getElementById('print-company-logo').src = comp.logo;
+            document.getElementById('print-company-logo').style.display = 'block';
+        } else {
+            document.getElementById('print-company-logo').style.display = 'none';
+        }
+        
+        // Populate Customer
+        document.getElementById('print-customer-name').textContent = data.customer.name;
+        
+        // Populate Invoice
+        const inv = data.invoice;
+        document.getElementById('print-invoice-id').textContent = inv.id;
+        // Format dates to DD/MM/YYYY
+        const formatDate = (ds) => {
+            if (!ds) return '-';
+            const p = ds.split('-');
+            if (p.length < 3) return ds;
+            return `${p[2]}/${p[1]}/${p[0]}`;
+        };
+        document.getElementById('print-invoice-date').textContent = formatDate(inv.date);
+        
+        const trDueDate = document.getElementById('print-row-due-date');
+        if (inv.payment_type_name && inv.payment_type_name.toLowerCase().includes('tempo')) {
+            document.getElementById('print-invoice-due-date').textContent = formatDate(inv.due_date);
+            trDueDate.style.display = 'table-row';
+        } else {
+            trDueDate.style.display = 'none';
+        }
+        
+        document.getElementById('print-invoice-payment-type').textContent = inv.payment_type_name;
+        
+        // Items
+        const tbody = document.getElementById('print-invoice-items');
+        tbody.innerHTML = data.items.map((it, idx) => `
+            <tr>
+                <td style="border: 1px solid #000; padding: 0.5rem; text-align: center;">${idx + 1}</td>
+                <td style="border: 1px solid #000; padding: 0.5rem;">${it.product_name}</td>
+                <td style="border: 1px solid #000; padding: 0.5rem; text-align: center;">${it.unit_name}</td>
+                <td style="border: 1px solid #000; padding: 0.5rem; text-align: center;">${it.quantity}</td>
+                <td style="border: 1px solid #000; padding: 0.5rem; text-align: right;">${rp(it.price).replace('Rp', '').trim()}</td>
+                <td style="border: 1px solid #000; padding: 0.5rem; text-align: right;">${rp(it.total).replace('Rp', '').trim()}</td>
+            </tr>
+        `).join('');
+        
+        // Totals
+        const subtotal = inv.total - inv.tax;
+        document.getElementById('print-invoice-subtotal').textContent = rp(subtotal).replace('Rp', '').trim();
+        document.getElementById('print-invoice-tax').textContent = rp(inv.tax).replace('Rp', '').trim();
+        document.getElementById('print-invoice-grand-total').textContent = rp(inv.total).replace('Rp', '').trim();
+        
+        // Show view
+        document.getElementById('print-invoice-view').style.display = 'block';
+        document.body.style.overflow = 'hidden'; // prevent background scroll
+        
+    } catch (err) {
+        console.error(err);
+        showToast('Gagal menyiapkan print', 'error');
+    }
+}
+
+function closePrintInvoiceView() {
+    document.getElementById('print-invoice-view').style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
 
