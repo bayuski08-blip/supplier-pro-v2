@@ -935,18 +935,20 @@
                                 </div>
                                 <div class="form-group">
                                     <label>Alamat</label>
-                                    <textarea id="settings-company-address"
-                                        class="form-input"></textarea>
+                                    <textarea id="settings-company-address" class="form-input"></textarea>
                                 </div>
                                 <div class="form-group">
                                     <label>Logo Perusahaan</label>
-                                    <input type="file" id="settings-company-logo-file" class="form-input" accept="image/*" onchange="previewCompanyLogo(this)">
+                                    <input type="file" id="settings-company-logo-file" class="form-input"
+                                        accept="image/*" onchange="previewCompanyLogo(this)">
                                     <div style="margin-top: 10px;">
-                                        <img id="settings-company-logo-preview" src="" style="max-height: 80px; display: none; border: 1px solid var(--gray-300); border-radius: 4px; padding: 4px;">
+                                        <img id="settings-company-logo-preview" src=""
+                                            style="max-height: 80px; display: none; border: 1px solid var(--gray-300); border-radius: 4px; padding: 4px;">
                                         <input type="hidden" id="settings-company-logo-base64">
                                     </div>
                                 </div>
-                                <button class="btn-toolbar primary" id="btn-save-company-profile" onclick="saveCompanyProfile(event)">
+                                <button class="btn-toolbar primary" id="btn-save-company-profile"
+                                    onclick="saveCompanyProfile(event)">
                                     <i data-lucide="save"></i> Simpan
                                 </button>
                             </div>
@@ -1358,8 +1360,10 @@
                         ondragleave="this.style.borderColor='#CBD5E1';this.style.background='var(--gray-50)';"
                         ondrop="handleImportDrop(event)">
                         <div id="import-dropzone-content">
-                            <i data-lucide="upload-cloud" style="width:36px;height:36px;color:var(--gray-400);margin-bottom:0.75rem;"></i>
-                            <p style="font-weight:600;color:var(--gray-700);margin-bottom:0.25rem;">Pilih File untuk Diimpor</p>
+                            <i data-lucide="upload-cloud"
+                                style="width:36px;height:36px;color:var(--gray-400);margin-bottom:0.75rem;"></i>
+                            <p style="font-weight:600;color:var(--gray-700);margin-bottom:0.25rem;">Pilih File untuk
+                                Diimpor</p>
                             <p style="font-size:0.75rem;color:var(--gray-500);">Klik atau seret file .xlsx ke sini</p>
                         </div>
                         <input type="file" id="import-file-input" style="display:none;" accept=".xlsx,.xls"
@@ -1368,7 +1372,9 @@
                 </div>
                 <!-- State: progress -->
                 <div id="import-state-progress" style="display:none;text-align:center;padding:2rem 0;">
-                    <div style="display:inline-block;width:40px;height:40px;border:4px solid var(--gray-200);border-top-color:var(--blue-500);border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:1rem;"></div>
+                    <div
+                        style="display:inline-block;width:40px;height:40px;border:4px solid var(--gray-200);border-top-color:var(--blue-500);border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:1rem;">
+                    </div>
                     <p style="font-weight:600;color:var(--gray-700);" id="import-progress-text">Mengimpor data...</p>
                 </div>
                 <!-- State: result -->
@@ -1381,7 +1387,9 @@
                         <p style="color:var(--emerald-600);font-weight:600;" id="import-result-success"></p>
                         <p style="color:var(--rose-600);font-weight:600;" id="import-result-failed"></p>
                     </div>
-                    <div id="import-error-list" style="margin-top:0.75rem;max-height:160px;overflow-y:auto;font-size:0.8rem;color:var(--rose-600);"></div>
+                    <div id="import-error-list"
+                        style="margin-top:0.75rem;max-height:160px;overflow-y:auto;font-size:0.8rem;color:var(--rose-600);">
+                    </div>
                 </div>
             </div>
             <div class="modal-footer" id="import-modal-footer">
@@ -1394,7 +1402,11 @@
         </div>
     </div>
     <style>
-    @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
     </style>
 
     <!-- Add Customer Modal -->
@@ -2517,7 +2529,8 @@
                         <input type="checkbox" id="master-data-cashcat-is-system"
                             style="width:16px;height:16px;cursor:pointer;">
                         <label for="master-data-cashcat-is-system" style="margin:0;cursor:pointer;font-size:0.875rem;">
-                            Kategori Sistem <span style="color:var(--gray-400);font-size:0.8rem;">(tidak dapat dihapus)</span>
+                            Kategori Sistem <span style="color:var(--gray-400);font-size:0.8rem;">(tidak dapat
+                                dihapus)</span>
                         </label>
                     </div>
                 </div>
@@ -2623,48 +2636,68 @@
     </div>
 
     <!-- Printable Invoice Page (Hidden by default, shown via JS) -->
-    <div id="print-invoice-view" style="display: none; background: white; width: 100%; min-height: 100vh; position: fixed; top: 0; left: 0; z-index: 99999; padding: 2rem; box-sizing: border-box; overflow-y: auto;">
+    <div id="print-invoice-view"
+        style="display: none; background: white; width: 100%; min-height: 100vh; position: fixed; top: 0; left: 0; z-index: 99999; padding: 2rem; box-sizing: border-box; overflow-y: auto;">
         <div style="max-width: 800px; margin: 0 auto; background: white;">
             <!-- Actions (Not printed) -->
             <div class="no-print" style="display: flex; justify-content: flex-end; gap: 1rem; margin-bottom: 2rem;">
                 <button class="btn-toolbar secondary" onclick="closePrintInvoiceView()">Tutup</button>
-                <button class="btn-toolbar primary" onclick="window.print()"><i data-lucide="printer"></i> Cetak / Print</button>
+                <button class="btn-toolbar primary" onclick="window.print()"><i data-lucide="printer"></i> Cetak /
+                    Print</button>
             </div>
 
             <!-- Invoice Header -->
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; border-bottom: 2px solid #000; padding-bottom: 1rem;">
-                <div>
-                    <img id="print-company-logo" src="" style="max-height: 80px; margin-bottom: 1rem; display: none;">
-                    <h2 id="print-company-name" style="margin: 0; font-size: 1.5rem; color: #000;"></h2>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+                <div style="flex: 0 0 30%; text-align: center;">
+                    <img id="print-company-logo" src=""
+                        style="max-height: 140px; max-width: 100%; display: none; margin: 0 auto;">
+                    <h2 id="print-company-name" style="margin: 0.5rem 0 0 0; font-size: 1.25rem; color: #000;"></h2>
                 </div>
-                <div style="text-align: right; max-width: 300px; color: #000;">
-                    <div id="print-company-address" style="margin-bottom: 0.5rem; font-size: 0.875rem;"></div>
-                    <div style="font-size: 0.875rem;">Email : <span id="print-company-email"></span></div>
-                    <div style="font-size: 0.875rem;">Tlp : <span id="print-company-phone"></span></div>
-                </div>
-            </div>
+                <div style="flex: 0 0 65%; color: #000; font-size: 0.875rem; line-height: 1.6;">
+                    <div id="print-company-address" style="font-weight: bold; font-size: 1rem; margin-bottom: 0.25rem;">
+                    </div>
+                    <div style="font-weight: bold;">Email : <span id="print-company-email"></span></div>
+                    <div style="font-weight: bold; margin-bottom: 1rem;">Tlp : <span id="print-company-phone"></span>
+                    </div>
 
-            <!-- Invoice Title & Customer Info -->
-            <h1 style="text-align: center; margin-bottom: 2rem; font-size: 1.75rem; text-transform: uppercase; color: #000;">INVOICE</h1>
-            
-            <div style="display: flex; justify-content: space-between; margin-bottom: 2rem; color: #000;">
-                <div>
-                    <table style="font-size: 0.875rem; border: none;">
-                        <tr><td style="padding-right: 1rem; font-weight: bold; padding-bottom: 0.25rem;">Nama Customer</td><td>: <span id="print-customer-name"></span></td></tr>
-                    </table>
-                </div>
-                <div>
-                    <table style="font-size: 0.875rem; border: none;">
-                        <tr><td style="padding-right: 1rem; font-weight: bold; padding-bottom: 0.25rem;">Tanggal</td><td>: <span id="print-invoice-date"></span></td></tr>
-                        <tr><td style="padding-right: 1rem; font-weight: bold; padding-bottom: 0.25rem;">No. Invoice</td><td>: <span id="print-invoice-id"></span></td></tr>
-                        <tr id="print-row-due-date"><td style="padding-right: 1rem; font-weight: bold; padding-bottom: 0.25rem;">Jatuh Tempo</td><td>: <span id="print-invoice-due-date"></span></td></tr>
-                        <tr><td style="padding-right: 1rem; font-weight: bold; padding-bottom: 0.25rem;">Payment</td><td>: <span id="print-invoice-payment-type"></span></td></tr>
+                    <table style="font-size: 0.875rem; border: none; width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="font-weight: bold; padding: 0.25rem 0; width: 130px;">Nama Customer</td>
+                            <td style="padding: 0.25rem 0;">: <span
+                                    style="display: inline-block; width: calc(100% - 15px); border-bottom: 1px solid #000; min-height: 1rem;"
+                                    id="print-customer-name"></span></td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight: bold; padding: 0.25rem 0;">Tanggal</td>
+                            <td style="padding: 0.25rem 0;">: <span
+                                    style="display: inline-block; width: calc(100% - 15px); border-bottom: 1px solid #000; min-height: 1rem;"
+                                    id="print-invoice-date"></span></td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight: bold; padding: 0.25rem 0;">No. Invoice</td>
+                            <td style="padding: 0.25rem 0;">: <span
+                                    style="display: inline-block; width: calc(100% - 15px); border-bottom: 1px solid #000; min-height: 1rem;"
+                                    id="print-invoice-id"></span></td>
+                        </tr>
+                        <tr id="print-row-due-date">
+                            <td style="font-weight: bold; padding: 0.25rem 0;">Jatuh Tempo</td>
+                            <td style="padding: 0.25rem 0;">: <span
+                                    style="display: inline-block; width: calc(100% - 15px); border-bottom: 1px solid #000; min-height: 1rem;"
+                                    id="print-invoice-due-date"></span></td>
+                        </tr>
+                        <tr>
+                            <td style="font-weight: bold; padding: 0.25rem 0;">Payment</td>
+                            <td style="padding: 0.25rem 0;">: <span
+                                    style="display: inline-block; width: calc(100% - 15px); border-bottom: 1px solid #000; min-height: 1rem;"
+                                    id="print-invoice-payment-type"></span></td>
+                        </tr>
                     </table>
                 </div>
             </div>
 
             <!-- Items Table -->
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 2rem; font-size: 0.875rem; color: #000;">
+            <table
+                style="width: 100%; border-collapse: collapse; margin-bottom: 2rem; font-size: 0.875rem; color: #000;">
                 <thead>
                     <tr>
                         <th style="border: 1px solid #000; padding: 0.5rem; text-align: center; width: 50px;">No.</th>
@@ -2710,8 +2743,11 @@
                             <td style="text-align: right;" id="print-invoice-tax"></td>
                         </tr>
                         <tr>
-                            <td style="padding: 0.5rem 0; font-weight: bold; font-size: 1rem; border-top: 2px solid #000; margin-top: 0.5rem;">GRAND TOTAL</td>
-                            <td style="text-align: right; font-weight: bold; font-size: 1rem; border-top: 2px solid #000; margin-top: 0.5rem;" id="print-invoice-grand-total"></td>
+                            <td
+                                style="padding: 0.5rem 0; font-weight: bold; font-size: 1rem; border-top: 2px solid #000; margin-top: 0.5rem;">
+                                GRAND TOTAL</td>
+                            <td style="text-align: right; font-weight: bold; font-size: 1rem; border-top: 2px solid #000; margin-top: 0.5rem;"
+                                id="print-invoice-grand-total"></td>
                         </tr>
                     </table>
                 </div>
