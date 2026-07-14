@@ -4559,7 +4559,7 @@ async function saveCompanyProfile(e) {
 async function printInvoice(id) {
     try {
         showToast('Menyiapkan invoice untuk dicetak...', 'info');
-        const res = await fetch(`/api/invoices/${id}/print-data`, { headers: getAuthHeaders() });
+        const res = await fetch(`/api/invoices/${encodeURIComponent(id)}/print-data`, { headers: getAuthHeaders() });
         if (!res.ok) throw new Error('Failed to load print data');
         const data = await res.json();
         
