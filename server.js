@@ -39,7 +39,9 @@ pool.query(`
     ('company_phone', ''),
     ('company_email', ''),
     ('company_address', ''),
-    ('company_logo', '')
+    ('company_logo', ''),
+    ('ppn_enabled', 'true'),
+    ('pajak_default', '11')
     ON CONFLICT (key) DO NOTHING;
   `);
 }).catch(err => console.error('Error initializing settings table on startup:', err));
@@ -186,6 +188,15 @@ const authorizeRoles = (...allowedRoles) => {
 };
 
 // ======================= API ROUTES =======================
+
+app.get('/api/transactions/count', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT COUNT(*) as count FROM sales_invoices');
+    res.json({ count: parseInt(result.rows[0].count, 10) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // --- Auth Routes ---
 app.post('/api/auth/login', async (req, res) => {
@@ -846,7 +857,15 @@ app.get('/api/invoices/:id/items', authenticateToken, authorizeRoles('admin', 'k
       LEFT JOIN products p ON p.id = ii.product_id
       WHERE ii.invoice_id = $1
     `, [req.params.id]);
-    res.json(result.rows);
+    // Security: strip fee fields from non-admin responses
+    const rows = result.rows.map(row => {
+      if (req.user.role !== 'admin') {
+        const { customer_fee, fee_notes, ...rest } = row;
+        return rest;
+      }
+      return row;
+    });
+    res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -878,19 +897,33 @@ app.get('/api/invoices/:id/print-data', authenticateToken, async (req, res) => {
       WHERE ii.invoice_id = $1
     `, [id]);
     
-    const settingsRes = await pool.query(`SELECT key, value FROM settings WHERE key IN ('company_name', 'company_phone', 'company_email', 'company_address', 'company_logo')`);
+    const settingsRes = await pool.query(`SELECT key, value FROM settings WHERE key IN ('company_name', 'company_phone', 'company_email', 'company_address', 'company_logo', 'ppn_enabled', 'pajak_default')`);
     const company = {};
+    const settingsMap = {};
     settingsRes.rows.forEach(r => {
-      company[r.key.replace('company_', '')] = r.value;
+      if (r.key.startsWith('company_')) {
+        company[r.key.replace('company_', '')] = r.value;
+      }
+      settingsMap[r.key] = r.value;
     });
+
+    // PPN Recalculation logic
+    const ppnEnabled = settingsMap['ppn_enabled'] !== 'false';
+    const pajakDefault = parseFloat(settingsMap['pajak_default'] || 11);
+    const subtotal = parseFloat(invoiceRow.subtotal || 0);
+    const diskon = parseFloat(invoiceRow.discount || 0);
+    
+    const recalculatedTax = ppnEnabled ? Math.round((subtotal - diskon) * (pajakDefault / 100)) : 0;
+    const recalculatedTotal = subtotal - diskon + recalculatedTax;
     
     res.json({
       invoice: {
         id: invoiceRow.id,
         date: invoiceRow.date ? String(invoiceRow.date).split('T')[0] : '',
         due_date: invoiceRow.due_date ? String(invoiceRow.due_date).split('T')[0] : '',
-        total: parseFloat(invoiceRow.total),
-        tax: parseFloat(invoiceRow.tax || 0),
+        total: recalculatedTotal,
+        subtotal: subtotal,
+        tax: recalculatedTax,
         payment_type_name: invoiceRow.payment_type_name || 'Tunai'
       },
       customer: {
@@ -938,27 +971,52 @@ app.post('/api/invoices', authenticateToken, authorizeRoles('admin', 'kasir'), a
 
   console.log(`[Invoice Creation API] Selected Payment Type ID: "${payment_type_id}"`);
 
-  const insertInvoiceQuery = 'INSERT INTO sales_invoices (id, date, customer_id, total, paid_amount, payment_type_id, due_date, status, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)';
+  const insertInvoiceQuery = 'INSERT INTO sales_invoices (id, date, customer_id, subtotal, discount, tax, total, paid_amount, payment_type_id, due_date, status, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)';
   const updateStockQuery = 'UPDATE products SET stock = stock - $1 WHERE id = $2';
-
-  const date = req.body.date ? new Date(req.body.date).toISOString() : new Date().toISOString();
-  const status = paid >= total ? 'Lunas' : (paid > 0 ? 'Sebagian' : 'Belum Bayar');
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Recalculate subtotal and tax to ensure correctness (Masalah A)
+    const settingsRes = await client.query(`SELECT key, value FROM settings WHERE key IN ('ppn_enabled', 'pajak_default')`);
+    const settingsMap = {};
+    settingsRes.rows.forEach(r => settingsMap[r.key] = r.value);
+    
+    const ppnEnabled = settingsMap['ppn_enabled'] !== 'false';
+    const pajakDefault = parseFloat(settingsMap['pajak_default'] || 11);
+    
+    let subtotal = 0;
+    if (items && Array.isArray(items)) {
+      items.forEach(item => {
+        subtotal += (parseFloat(item.price) || 0) * (parseFloat(item.quantity) || 0);
+      });
+    }
+    const diskon = parseFloat(req.body.discount || req.body.diskon || 0);
+    const taxAmount = ppnEnabled ? Math.round((subtotal - diskon) * (pajakDefault / 100)) : 0;
+    const finalTotal = subtotal - diskon + taxAmount;
+
+    const date = req.body.date ? new Date(req.body.date).toISOString() : new Date().toISOString();
+    const status = paid >= finalTotal ? 'Lunas' : (paid > 0 ? 'Sebagian' : 'Belum Bayar');
+
     const prefix = await getSetting('prefix_sales', 'INV/{YYYY}/{MM}/');
     const id = await generateNextId(client, 'sales_invoices', prefix);
     
     console.log(`[Invoice Creation API] Saving invoice ${id} with payment_type_id: "${payment_type_id}"`);
-    await client.query(insertInvoiceQuery, [id, date, customer_id, total, paid, payment_type_id, due_date, status, userId]);
+    await client.query(insertInvoiceQuery, [id, date, customer_id, subtotal, diskon, taxAmount, finalTotal, paid, payment_type_id, due_date, status, userId]);
 
     // Reduce stock
     if (items && Array.isArray(items)) {
       for (const item of items) {
         await client.query(updateStockQuery, [item.quantity, item.id]);
-        // Also insert to invoice_items
-        await client.query('INSERT INTO invoice_items (id, invoice_id, product_id, quantity, price) VALUES ($1, $2, $3, $4, $5)', [Date.now().toString() + Math.floor(Math.random() * 1000), id, item.id, item.quantity, item.price || 0]);
+        // Also insert to invoice_items — include customer_fee/fee_notes (admin only)
+        const itemFee = req.user.role === 'admin' ? (parseFloat(item.customer_fee) || 0) : 0;
+        const itemFeeNotes = req.user.role === 'admin' ? (item.fee_notes || null) : null;
+        if (itemFee < 0) throw new Error('customer_fee tidak boleh negatif');
+        await client.query(
+          'INSERT INTO invoice_items (id, invoice_id, product_id, quantity, price, customer_fee, fee_notes) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+          [Date.now().toString() + Math.floor(Math.random() * 1000), id, item.id, item.quantity, item.price || 0, itemFee, itemFeeNotes]
+        );
       }
     }
 
@@ -1058,6 +1116,17 @@ app.post('/api/finance/receivables/:id/pay', authenticateToken, authorizeRoles('
 // Auto-migrate: add 'status' column if not exists
 pool.query(`ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active'`)
   .catch(err => console.error('Error adding status column to cash_transactions:', err));
+
+// Auto-migrate: add customer_fee and fee_notes columns to invoice_items if not exists
+(async () => {
+  try {
+    await pool.query(`ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS customer_fee NUMERIC(15,2) NOT NULL DEFAULT 0`);
+    await pool.query(`ALTER TABLE invoice_items ADD COLUMN IF NOT EXISTS fee_notes VARCHAR(255)`);
+    console.log('[Migration] invoice_items: customer_fee & fee_notes columns ensured');
+  } catch (err) {
+    console.error('[Migration] Failed to add customer_fee/fee_notes to invoice_items:', err.message);
+  }
+})();
 
 app.get('/api/finance/cash-flow', authenticateToken, authorizeRoles('admin', 'finance'), async (req, res) => {
   try {
@@ -1266,14 +1335,24 @@ app.get('/api/laporan/laba-rugi', authenticateToken, authorizeRoles('admin', 'fi
       GROUP BY ct.category
     `, [start_date, end_date]);
 
+    // 3b. BEBAN FEE CUSTOMER — sourced from invoice_items.customer_fee (not cash_transactions)
+    const resFee = await client.query(`
+      SELECT COALESCE(SUM(ii.customer_fee), 0) AS total_fee
+      FROM invoice_items ii
+      JOIN sales_invoices si ON si.id = ii.invoice_id
+      WHERE si.date::TIMESTAMPTZ::DATE BETWEEN $1 AND $2
+        AND si.status NOT IN ('Batal', 'Dibatalkan')
+    `, [start_date, end_date]);
+    const bebanFeeCustomer = parseFloat(resFee.rows[0]?.total_fee || 0);
+
     const rincianBeban = resBeban.rows.map(r => ({
       category: r.category,
       total: parseFloat(r.total)
     }));
-    const totalBebanOperasional = rincianBeban.reduce((sum, item) => sum + item.total, 0);
+    const totalBebanOperasional = rincianBeban.reduce((sum, item) => sum + item.total, 0) + bebanFeeCustomer;
     const labaOperasional = labaKotor - totalBebanOperasional;
 
-    console.log(`[Laba Rugi] BebanOperasional=${totalBebanOperasional} LabaOperasional=${labaOperasional}`);
+    console.log(`[Laba Rugi] BebanOperasional=${totalBebanOperasional} (incl. FeeCustomer=${bebanFeeCustomer}) LabaOperasional=${labaOperasional}`);
 
     // 4. PENYESUAIAN STOK (stock-opname adjustments — still tracked by category name)
     const resStok = await client.query(`
@@ -1325,7 +1404,8 @@ app.get('/api/laporan/laba-rugi', authenticateToken, authorizeRoles('admin', 'fi
         labaKotor: labaKotor,
         operasional: {
           rincian: rincianBeban,
-          total: totalBebanOperasional
+          total: totalBebanOperasional,
+          bebanFeeCustomer: bebanFeeCustomer
         },
         labaOperasional: labaOperasional,
         penyesuaian_stok: {
@@ -1879,8 +1959,15 @@ app.put('/api/invoices/:id', authenticateToken, authorizeRoles('admin', 'kasir')
         const prodId = item.product_id || item.id;
         const qty = parseFloat(item.quantity || item.qty || 0);
         const price = parseFloat(item.price || item.sell_price || 0);
+        // customer_fee & fee_notes: only persist if requester is admin
+        const itemFee = req.user.role === 'admin' ? (parseFloat(item.customer_fee) || 0) : 0;
+        const itemFeeNotes = req.user.role === 'admin' ? (item.fee_notes || null) : null;
+        if (itemFee < 0) throw new Error('customer_fee tidak boleh negatif');
 
-        await client.query('INSERT INTO invoice_items (id, invoice_id, product_id, quantity, price) VALUES ($1, $2, $3, $4, $5)', [itemId, invId, prodId, qty, price]);
+        await client.query(
+          'INSERT INTO invoice_items (id, invoice_id, product_id, quantity, price, customer_fee, fee_notes) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+          [itemId, invId, prodId, qty, price, itemFee, itemFeeNotes]
+        );
         await client.query('UPDATE products SET stock = stock - $1 WHERE id = $2', [qty, prodId]);
       }
     }
@@ -2191,6 +2278,73 @@ app.get('/login', (req, res) => {
     console.error('[Seed] Failed to seed superadmin user:', err.message);
   }
 })();
+
+// --- Laporan Customer Fee (Admin Only) ---
+app.get('/api/reports/customer-fee', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+  const { start_date, end_date } = req.query;
+  if (!start_date || !end_date) {
+    return res.status(400).json({ success: false, error: 'Parameter start_date dan end_date wajib diisi (format: YYYY-MM-DD)' });
+  }
+  const client = await pool.connect();
+  try {
+    // Breakdown per bulan
+    const resBulan = await client.query(`
+      SELECT
+        TO_CHAR(DATE_TRUNC('month', si.date::TIMESTAMPTZ::DATE), 'YYYY-MM') AS periode,
+        SUM(ii.customer_fee) AS total_fee,
+        COUNT(DISTINCT si.id) AS jumlah_transaksi
+      FROM invoice_items ii
+      JOIN sales_invoices si ON si.id = ii.invoice_id
+      WHERE si.date::TIMESTAMPTZ::DATE BETWEEN $1 AND $2
+        AND si.status NOT IN ('Batal', 'Dibatalkan')
+        AND ii.customer_fee > 0
+      GROUP BY DATE_TRUNC('month', si.date::TIMESTAMPTZ::DATE)
+      ORDER BY DATE_TRUNC('month', si.date::TIMESTAMPTZ::DATE)
+    `, [start_date, end_date]);
+
+    // Breakdown per produk
+    const resProduk = await client.query(`
+      SELECT
+        p.name AS produk,
+        SUM(ii.customer_fee) AS total_fee,
+        COUNT(*) AS jumlah_item
+      FROM invoice_items ii
+      JOIN products p ON p.id = ii.product_id
+      JOIN sales_invoices si ON si.id = ii.invoice_id
+      WHERE si.date::TIMESTAMPTZ::DATE BETWEEN $1 AND $2
+        AND si.status NOT IN ('Batal', 'Dibatalkan')
+        AND ii.customer_fee > 0
+      GROUP BY p.name
+      ORDER BY total_fee DESC
+    `, [start_date, end_date]);
+
+    const totalFee = resBulan.rows.reduce((s, r) => s + parseFloat(r.total_fee || 0), 0);
+
+    res.json({
+      success: true,
+      data: {
+        start_date,
+        end_date,
+        total_fee: totalFee,
+        per_bulan: resBulan.rows.map(r => ({
+          periode: r.periode,
+          total_fee: parseFloat(r.total_fee || 0),
+          jumlah_transaksi: parseInt(r.jumlah_transaksi)
+        })),
+        per_produk: resProduk.rows.map(r => ({
+          produk: r.produk,
+          total_fee: parseFloat(r.total_fee || 0),
+          jumlah_item: parseInt(r.jumlah_item)
+        }))
+      }
+    });
+  } catch (err) {
+    console.error('[Customer Fee Report] Error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  } finally {
+    client.release();
+  }
+});
 
 app.listen(port, () => {
   console.log(`SupplierPro API running at http://localhost:${port}`);

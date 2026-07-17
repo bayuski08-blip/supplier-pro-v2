@@ -81,6 +81,9 @@
                     <div class="nav-item" data-page="balance" id="nav-balance">
                         <i data-lucide="scale"></i> Neraca
                     </div>
+                    <div class="nav-item" data-page="customerfee" id="nav-customerfee">
+                        <i data-lucide="lock"></i> Fee Customer
+                    </div>
                 </div>
 
                 <!-- Lainnya -->
@@ -302,7 +305,7 @@
                                     <span>Diskon</span>
                                     <span id="cart-discount">Rp 0</span>
                                 </div>
-                                <div class="cart-summary-row" style="color: var(--gray-600);">
+                                <div id="cart-ppn-row" class="cart-summary-row" style="color: var(--gray-600); display: none;">
                                     <span>PPN <span id="cart-ppn-label" style="font-size: 0.75rem;">(11%)</span></span>
                                     <span id="cart-ppn">Rp 0</span>
                                 </div>
@@ -961,26 +964,28 @@
                                 <h3>Preferensi Invoice</h3>
                             </div>
                             <div class="settings-card-body">
-                                <div class="form-group">
-                                    <label>Prefix Nomor Invoice</label>
-                                    <input type="text" class="form-input" value="INV-">
-                                </div>
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label>Pajak Default (%)</label>
-                                        <input type="number" class="form-input" id="settings-ppn" value="11">
+                                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                            <input type="checkbox" id="settings-ppn-enabled" onchange="handlePpnToggle(this)" style="width: 16px; height: 16px; margin: 0;">
+                                            Aktifkan PPN
+                                        </label>
+                                        <div style="margin-top: 10px;">
+                                            <label>Pajak Default (%)</label>
+                                            <input type="number" class="form-input" id="settings-ppn" value="11">
+                                        </div>
                                     </div>
                                     <div class="form-group">
                                         <label>Termin Default (hari)</label>
-                                        <input type="number" class="form-input" value="14">
+                                        <input type="number" class="form-input" id="settings-termin" value="14">
                                     </div>
                                 </div>
                                 <div class="form-group">
                                     <label>Catatan Invoice</label>
-                                    <textarea
+                                    <textarea id="settings-invoice-note"
                                         class="form-input">Pembayaran dapat dilakukan melalui transfer bank. Terima kasih atas kepercayaan Anda.</textarea>
                                 </div>
-                                <button class="btn-toolbar primary">
+                                <button class="btn-toolbar primary" id="btn-save-invoice-prefs">
                                     <i data-lucide="save"></i> Simpan
                                 </button>
                             </div>
@@ -1169,6 +1174,82 @@
                     <div class="empty-state" id="master-data-empty" style="display:none;">
                         <i data-lucide="database"></i>
                         <p>Belum ada data master. Klik <strong>Tambah Data</strong> untuk memulai.</p>
+                    </div>
+                </section>
+
+                <!-- ============================================================
+                 PAGE: FEE CUSTOMER (Admin Only)
+                 ============================================================ -->
+                <section class="page-section" id="page-customerfee">
+                    <div class="page-toolbar">
+                        <div class="page-toolbar-left">
+                            <h2 class="page-title"><i data-lucide="lock" style="width:20px;height:20px;vertical-align:middle;margin-right:0.4rem;color:var(--amber-500);"></i>Laporan Fee Customer <span style="font-size:0.75rem;background:#fef3c7;color:#92400e;padding:0.15rem 0.5rem;border-radius:999px;font-weight:600;vertical-align:middle;">Admin Only</span></h2>
+                        </div>
+                        <div class="page-toolbar-right">
+                            <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+                                <div class="form-group" style="margin:0;">
+                                    <label style="font-size:0.75rem;color:var(--gray-500);margin-bottom:0.2rem;display:block;">Dari Tanggal</label>
+                                    <input type="date" id="customerfee-start-date" class="form-input" style="width:auto;padding:0.4rem 0.6rem;font-size:0.85rem;">
+                                </div>
+                                <div class="form-group" style="margin:0;">
+                                    <label style="font-size:0.75rem;color:var(--gray-500);margin-bottom:0.2rem;display:block;">Sampai Tanggal</label>
+                                    <input type="date" id="customerfee-end-date" class="form-input" style="width:auto;padding:0.4rem 0.6rem;font-size:0.85rem;">
+                                </div>
+                                <button class="btn-toolbar primary" onclick="renderCustomerFeeReport()" style="align-self:flex-end;padding:0.5rem 1rem;">
+                                    <i data-lucide="search" style="width:14px;height:14px;"></i> Tampilkan
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Summary Card -->
+                    <div id="customerfee-summary" style="margin-bottom:1.5rem;">
+                        <!-- Filled by JS -->
+                    </div>
+
+                    <!-- Breakdown Tables -->
+                    <div class="dashboard-grid-2">
+                        <!-- Per Bulan -->
+                        <div class="dash-card">
+                            <div class="dash-card-header">
+                                <span class="dash-card-title">📅 Breakdown per Bulan</span>
+                            </div>
+                            <div class="dash-card-body" style="padding:0;">
+                                <table class="data-table" id="customerfee-table-bulan">
+                                    <thead>
+                                        <tr>
+                                            <th>Periode</th>
+                                            <th style="text-align:right;">Total Fee</th>
+                                            <th style="text-align:right;">Jumlah Invoice</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="customerfee-body-bulan">
+                                        <tr><td colspan="3" style="text-align:center;padding:2rem;color:var(--gray-400);">Pilih rentang tanggal lalu klik Tampilkan</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Per Produk -->
+                        <div class="dash-card">
+                            <div class="dash-card-header">
+                                <span class="dash-card-title">📦 Breakdown per Produk</span>
+                            </div>
+                            <div class="dash-card-body" style="padding:0;">
+                                <table class="data-table" id="customerfee-table-produk">
+                                    <thead>
+                                        <tr>
+                                            <th>Produk</th>
+                                            <th style="text-align:right;">Total Fee</th>
+                                            <th style="text-align:right;">Jumlah Item</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="customerfee-body-produk">
+                                        <tr><td colspan="3" style="text-align:center;padding:2rem;color:var(--gray-400);">Pilih rentang tanggal lalu klik Tampilkan</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </section>
 
@@ -2544,6 +2625,27 @@
         </div>
     </div>
 
+    <!-- Toggle PPN Confirm Modal -->
+    <div class="modal-overlay" id="modal-confirm-ppn">
+        <div class="modal" style="max-width: 450px;">
+            <div class="modal-header">
+                <h2>Konfirmasi Perubahan PPN</h2>
+                <span class="close" onclick="closeModal('modal-confirm-ppn')">&times;</span>
+            </div>
+            <div class="modal-body" style="padding: 20px; line-height: 1.5; color: var(--gray-700);">
+                <p>Bisnis ini sudah punya transaksi. Mengubah pengaturan PPN akan mempengaruhi perhitungan pada SEMUA invoice (termasuk yang sudah dibuat sebelumnya), karena invoice selalu mengikuti pengaturan PPN yang berlaku saat ini. Lanjutkan?</p>
+            </div>
+            <div class="modal-footer" style="padding: 16px 20px; border-top: 1px solid var(--gray-200); display: flex; justify-content: flex-end; gap: 12px;">
+                <button class="btn-toolbar secondary" onclick="cancelPpnToggle()">
+                    Batalkan
+                </button>
+                <button class="btn-toolbar primary" onclick="confirmPpnToggle()">
+                    Lanjutkan
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Delete Master Confirm Modal -->
     <div class="modal-overlay" id="modal-delete-master">
         <div class="modal" style="max-width: 380px;">
@@ -2756,7 +2858,7 @@
     </div>
 
     <!-- Application Script -->
-    <script src="dashboard.js"></script>
+    <script src="dashboard.js?v=3"></script>
 </body>
 
 </html>

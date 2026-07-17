@@ -105,7 +105,9 @@ CREATE TABLE IF NOT EXISTS invoice_items (
   invoice_id VARCHAR(255) REFERENCES sales_invoices(id) ON DELETE CASCADE,
   product_id VARCHAR(255) REFERENCES products(id) ON DELETE SET NULL,
   quantity NUMERIC NOT NULL,
-  price NUMERIC NOT NULL
+  price NUMERIC NOT NULL,
+  customer_fee NUMERIC DEFAULT 0,
+  fee_notes TEXT
 );
 
 CREATE TABLE IF NOT EXISTS purchase_orders (
